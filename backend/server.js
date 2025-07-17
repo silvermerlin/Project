@@ -48,6 +48,11 @@ console.log(`📁 Workspace: ${WORKSPACE_DIR}`);
 console.log(`🤖 Ollama: ${OLLAMA_HOST}`);
 console.log(`🌐 Port: ${PORT}`);
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 // ============================================================================
 // 🗂️ FILE SYSTEM OPERATIONS
 // ============================================================================

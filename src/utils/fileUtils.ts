@@ -6,6 +6,8 @@ export interface FileItem {
   path: string;
   isModified: boolean;
   type: 'file';
+  file?: File; // Store the original File object for lazy loading
+  isLoaded: boolean; // Track if content has been loaded
 }
 
 export interface FolderItem {
@@ -68,16 +70,17 @@ export const generateFileId = (): string => {
   return Math.random().toString(36).substr(2, 9);
 };
 
-export const createNewFile = (name: string, content: string = '', path: string = ''): FileItem => {
-  const fullPath = path ? `${path}/${name}` : name;
+export const createNewFile = (name: string, parentFolderId?: string, content: string = ''): FileItem => {
+  const path = parentFolderId ? `folder-${parentFolderId}/${name}` : name;
   return {
     id: generateFileId(),
     name,
     content,
     language: getFileLanguage(name),
-    path: fullPath,
+    path,
     isModified: false,
     type: 'file',
+    isLoaded: true,
   };
 };
 
@@ -106,10 +109,32 @@ export const readFileFromInput = (file: File): Promise<FileItem> => {
         path: file.name,
         isModified: false,
         type: 'file',
+        isLoaded: true,
       });
     };
     reader.onerror = reject;
     reader.readAsText(file);
+  });
+};
+
+// New function for lazy loading file content
+export const loadFileContent = async (fileItem: FileItem): Promise<FileItem> => {
+  if (fileItem.isLoaded || !fileItem.file) {
+    return fileItem;
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      resolve({
+        ...fileItem,
+        content,
+        isLoaded: true,
+      });
+    };
+    reader.onerror = reject;
+    reader.readAsText(fileItem.file!);
   });
 };
 
@@ -164,17 +189,26 @@ export const readDirectoryFromInput = async (files: FileList): Promise<FolderIte
       }
     }
 
-    // Add file to its parent folder
+    // Add file to its parent folder (lazy loading - don't read content yet)
     try {
-      const fileItem = await readFileFromInput(file);
-      fileItem.path = relativePath;
+      const fileItem: FileItem = {
+        id: generateFileId(),
+        name: fileName,
+        content: '', // Will be loaded when file is opened
+        language: getFileLanguage(fileName),
+        path: relativePath,
+        isModified: false,
+        type: 'file',
+        file: file, // Store the original File object
+        isLoaded: false, // Content not loaded yet
+      };
       
       const parentFolder = folderMap.get(folderPath);
       if (parentFolder) {
         parentFolder.children.push(fileItem);
       }
     } catch (error) {
-      console.error('Error reading file:', error);
+      console.error('Error creating file item:', error);
     }
   }
 

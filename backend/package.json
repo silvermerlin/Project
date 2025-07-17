@@ -23,7 +23,8 @@
     "unzipper": "^0.10.14",
     "node-ssh": "^13.1.0",
     "dockerode": "^4.0.2",
-    "pm2": "^5.3.0"
+    "pm2": "^5.3.0",
+    "node-pty": "^1.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1",

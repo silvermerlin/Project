@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import {
   FileText,
   FolderOpen,
@@ -54,7 +55,8 @@ import {
   Thunder,
   Atom,
   Hexagon,
-  Octagon
+  Octagon,
+  Trash2
 } from 'lucide-react';
 import { FileItem, FolderItem, FileSystemItem } from '../utils/fileUtils';
 import { cn } from '../utils';
@@ -63,12 +65,15 @@ interface SidebarProps {
   fileSystemItems: FileSystemItem[];
   activeFileId: string | null;
   onFileSelect: (fileId: string) => void;
-  onNewFile: () => void;
+  onNewFile: (parentFolderId?: string) => void;
   onOpenFile: (files: FileList) => void;
   onOpenFolder: (files: FileList) => void;
   onDownloadFile: (fileId: string) => void;
   onToggleFolder: (folderId: string) => void;
   onOpenSettings: () => void;
+  onDeleteFile: (fileId: string) => void;
+  onRenameFile: (fileId: string, newName: string) => void;
+  onOpenInTerminal: (path: string) => void;
   className?: string;
 }
 
@@ -124,11 +129,25 @@ const Sidebar: React.FC<SidebarProps> = ({
   onDownloadFile,
   onToggleFolder,
   onOpenSettings,
+  onDeleteFile,
+  onRenameFile,
+  onOpenInTerminal,
   className,
 }) => {
   const [activeTab, setActiveTab] = useState<ActivityTab>('explorer');
   const [searchQuery, setSearchQuery] = useState('');
   const [extensionFilter, setExtensionFilter] = useState('');
+  const [contextMenu, setContextMenu] = useState<{
+    isOpen: boolean;
+    x: number;
+    y: number;
+    targetItem: FileSystemItem | null;
+  }>({
+    isOpen: false,
+    x: 0,
+    y: 0,
+    targetItem: null,
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -142,6 +161,82 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (e.target.files) {
       onOpenFolder(e.target.files);
     }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, item: FileSystemItem) => {
+    e.preventDefault();
+    setContextMenu({
+      isOpen: true,
+      x: e.clientX,
+      y: e.clientY,
+      targetItem: item,
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({
+      isOpen: false,
+      x: 0,
+      y: 0,
+      targetItem: null,
+    });
+  };
+
+  const getContextMenuItems = (item: FileSystemItem): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [];
+
+    if (item.type === 'file') {
+      items.push(
+        { id: 'open', label: 'Open', icon: <FileText className="w-4 h-4" />, action: () => onFileSelect(item.id) },
+        { id: 'open-to-side', label: 'Open to the Side', icon: <FileText className="w-4 h-4" />, action: () => onFileSelect(item.id) },
+        { separator: true },
+        { id: 'run', label: 'Run Code', icon: <Play className="w-4 h-4" />, action: () => console.log('Run code for', item.name) },
+        { id: 'debug', label: 'Debug Code', icon: <Settings className="w-4 h-4" />, action: () => console.log('Debug code for', item.name) },
+        { separator: true },
+        { id: 'reveal', label: 'Reveal in File Explorer', shortcut: 'Shift+Alt+R', action: () => console.log('Reveal', item.name) },
+        { id: 'terminal', label: 'Open in Integrated Terminal', action: () => onOpenInTerminal(item.path) },
+        { separator: true },
+        { id: 'copy', label: 'Copy', shortcut: 'Ctrl+C', action: () => navigator.clipboard.writeText(item.name) },
+        { id: 'copy-path', label: 'Copy Path', shortcut: 'Ctrl+Shift+C', action: () => navigator.clipboard.writeText(item.path) },
+        { id: 'copy-relative', label: 'Copy Relative Path', action: () => navigator.clipboard.writeText(item.path) },
+        { separator: true },
+        { id: 'rename', label: 'Rename...', shortcut: 'F2', action: () => {
+          const newName = prompt('Enter new name:', item.name);
+          if (newName && newName !== item.name) {
+            onRenameFile(item.id, newName);
+          }
+        }},
+        { id: 'delete', label: 'Delete', icon: <Trash2 className="w-4 h-4" />, action: () => {
+          if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
+            onDeleteFile(item.id);
+          }
+        }},
+      );
+    } else if (item.type === 'folder') {
+      items.push(
+        { id: 'new-file', label: 'New File...', icon: <Plus className="w-4 h-4" />, action: () => onNewFile(item.id) },
+        { id: 'new-folder', label: 'New Folder...', icon: <Folder className="w-4 h-4" />, action: () => console.log('New folder in', item.name) },
+        { separator: true },
+        { id: 'terminal', label: 'Open in Integrated Terminal', action: () => onOpenInTerminal(item.path) },
+        { separator: true },
+        { id: 'copy', label: 'Copy', shortcut: 'Ctrl+C', action: () => navigator.clipboard.writeText(item.name) },
+        { id: 'copy-path', label: 'Copy Path', shortcut: 'Ctrl+Shift+C', action: () => navigator.clipboard.writeText(item.path) },
+        { separator: true },
+        { id: 'rename', label: 'Rename...', shortcut: 'F2', action: () => {
+          const newName = prompt('Enter new name:', item.name);
+          if (newName && newName !== item.name) {
+            onRenameFile(item.id, newName);
+          }
+        }},
+        { id: 'delete', label: 'Delete', icon: <Trash2 className="w-4 h-4" />, action: () => {
+          if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
+            onDeleteFile(item.id);
+          }
+        }},
+      );
+    }
+
+    return items;
   };
 
   const getFileIcon = (language: string) => {
@@ -184,6 +279,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           )}
           style={{ paddingLeft: `${paddingLeft + 8}px` }}
           onClick={() => onFileSelect(item.id)}
+          onContextMenu={(e) => handleContextMenu(e, item)}
         >
           <span className="text-sm">{getFileIcon(fileItem.language)}</span>
           <span className="text-sm text-editor-text flex-1 truncate" title={item.name}>
@@ -204,6 +300,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             className="group flex items-center gap-2 px-2 py-1 rounded cursor-pointer transition-smooth hover:bg-editor-tab"
             style={{ paddingLeft: `${paddingLeft + 8}px` }}
             onClick={() => onToggleFolder(item.id)}
+            onContextMenu={(e) => handleContextMenu(e, item)}
           >
             <div className="flex items-center gap-1">
               {folderItem.isExpanded ? (
@@ -554,6 +651,32 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex-1 bg-editor-sidebar border-r border-editor-border">
         {renderContent()}
       </div>
+
+      {/* Context Menu */}
+      <ContextMenu
+        isOpen={contextMenu.isOpen}
+        x={contextMenu.x}
+        y={contextMenu.y}
+        items={contextMenu.targetItem ? getContextMenuItems(contextMenu.targetItem) : []}
+        onClose={closeContextMenu}
+      />
+
+      {/* Hidden file inputs */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        webkitdirectory=""
+        multiple
+        onChange={handleFolderInputChange}
+        className="hidden"
+      />
     </div>
   );
 };
