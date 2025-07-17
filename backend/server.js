@@ -304,6 +304,8 @@ app.post('/api/terminal', async (req, res) => {
       return res.status(400).json({ error: 'Command is required' });
     }
     
+    console.log('🖥️ Executing terminal command:', { command, cwd });
+    
     // Simple command execution using child_process
     const { exec } = await import('child_process');
     const { promisify } = await import('util');
@@ -312,6 +314,12 @@ app.post('/api/terminal', async (req, res) => {
     const result = await execAsync(command, { 
       cwd: path.join(WORKSPACE_DIR, cwd),
       timeout: 30000 
+    });
+    
+    console.log('🖥️ Command executed successfully:', { 
+      stdout: result.stdout.length, 
+      stderr: result.stderr.length,
+      exitCode: 0
     });
     
     res.json({ 
@@ -371,74 +379,7 @@ app.get('/api/files', async (req, res) => {
 // 🖥️ TERMINAL OPERATIONS
 // ============================================================================
 
-// Create new terminal
-app.post('/api/terminal', async (req, res) => {
-  try {
-    const { cwd = WORKSPACE_DIR, shell = 'bash' } = req.body;
-    const terminalId = uuidv4();
-    
-    // Determine shell based on OS
-    const defaultShell = process.platform === 'win32' ? 'powershell' : 'bash';
-    const terminalShell = shell || defaultShell;
-    
-    const terminal = spawn(terminalShell, [], {
-      name: 'xterm-color',
-      cols: 80,
-      rows: 24,
-      cwd: cwd,
-      env: process.env
-    });
-    
-    terminals.set(terminalId, terminal);
-    
-    res.json({ 
-      success: true, 
-      terminalId,
-      shell: terminalShell,
-      cwd: cwd
-    });
-  } catch (error) {
-    console.error('Error creating terminal:', error);
-    res.status(500).json({ error: 'Failed to create terminal' });
-  }
-});
 
-// Execute command in terminal
-app.post('/api/terminal/:terminalId/execute', async (req, res) => {
-  try {
-    const { terminalId } = req.params;
-    const { command } = req.body;
-    
-    const terminal = terminals.get(terminalId);
-    if (!terminal) {
-      return res.status(404).json({ error: 'Terminal not found' });
-    }
-    
-    // Write command to terminal
-    terminal.write(command + '\r');
-    
-    // Collect output for a reasonable time
-    let output = '';
-    const timeout = setTimeout(() => {
-      res.json({ success: true, output });
-    }, 2000);
-    
-    const onData = (data) => {
-      output += data;
-      if (data.includes('$') || data.includes('>')) {
-        clearTimeout(timeout);
-        terminal.off('data', onData);
-        res.json({ success: true, output });
-      }
-    };
-    
-    terminal.on('data', onData);
-    
-  } catch (error) {
-    console.error('Error executing command:', error);
-    res.status(500).json({ error: 'Failed to execute command' });
-  }
-});
 
 // ============================================================================
 // 🤖 AI INTEGRATION

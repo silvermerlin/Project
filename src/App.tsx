@@ -124,20 +124,23 @@ const AppContent: React.FC = () => {
 
   // File operations with backend integration
   const handleNewFile = useCallback(async (parentFolderId?: string) => {
+    console.log('📝 Creating new file, parent folder:', parentFolderId);
     const fileName = prompt('Enter file name:');
     if (!fileName) return;
 
     try {
       const filePath = parentFolderId ? `${parentFolderId}/${fileName}` : `/${fileName}`;
+      console.log('📝 Creating file at path:', filePath);
       await apiService.createFile(filePath);
       
-      // Reload file system
-      await loadFileSystem(currentPath);
+      console.log('📝 File created successfully, reloading file system');
+      // Reload file system from root to show all files
+      await loadFileSystem('/');
     } catch (error) {
       console.error('Error creating file:', error);
       alert('Failed to create file');
     }
-  }, [currentPath]);
+  }, []);
 
   const handleOpenFiles = useCallback(async (fileList: FileList) => {
     try {
@@ -175,24 +178,48 @@ const AppContent: React.FC = () => {
     }
   }, []);
 
+  // Helper function to find a file recursively in the file system tree
+  const findFileRecursively = (items: FileSystemItem[], fileId: string): FileItem | null => {
+    for (const item of items) {
+      if (item.id === fileId && item.type === 'file') {
+        return item as FileItem;
+      }
+      if (item.type === 'folder') {
+        const folderItem = item as FolderItem;
+        const found = findFileRecursively(folderItem.children, fileId);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   const handleFileSelect = useCallback(async (fileId: string) => {
-    const file = fileSystemItems.find(f => f.id === fileId);
-    if (!file || file.type !== 'file') return;
+    console.log('📄 File selected:', fileId);
+    const file = findFileRecursively(fileSystemItems, fileId);
+    console.log('📄 Found file:', file);
+    if (!file) {
+      console.log('❌ File not found');
+      return;
+    }
 
     // Check if file is already open
     const isAlreadyOpen = openFiles.some(f => f.id === fileId);
     if (isAlreadyOpen) {
+      console.log('📄 File already open, switching to it');
       setActiveFileId(fileId);
       return;
     }
 
     try {
+      console.log('📄 Loading file content from backend for path:', file.path);
       // Load file content from backend
       const content = await apiService.getFileContent(file.path);
+      console.log('📄 File content loaded, length:', content.length);
       const fileWithContent = { ...file, content, isLoaded: true };
       
       setOpenFiles(prev => [...prev, fileWithContent]);
       setActiveFileId(fileId);
+      console.log('📄 File opened successfully');
     } catch (error) {
       console.error('Error loading file content:', error);
       alert('Failed to load file content');
