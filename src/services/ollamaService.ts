@@ -7,13 +7,9 @@ export class OllamaService {
   private timeout: number;
 
   constructor(config: AIModelConfig) {
-    // Use proxy in development mode to avoid CORS issues
-    if (import.meta.env.DEV && (config.endpoint.includes('192.168.4.88:11434') || config.endpoint.includes('localhost:11434'))) {
-      this.baseUrl = '/api/ollama';
-      console.log('Using Ollama proxy for development:', this.baseUrl);
-    } else {
-      this.baseUrl = config.endpoint;
-    }
+    // Always use backend proxy to avoid CORS issues
+    this.baseUrl = '/api/ollama';
+    console.log('Using Ollama proxy through backend:', this.baseUrl);
     this.model = config.model;
     this.timeout = 300000; // 5 minutes for large context LLM responses
   }

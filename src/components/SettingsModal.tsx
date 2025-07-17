@@ -64,7 +64,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       id: `model-${Date.now()}`,
       name: 'New Model',
       provider: 'ollama',
-      endpoint: 'http://localhost:11434',
+      endpoint: 'https://editor.pinkchairparley.org',
       model: 'llama3',
       temperature: 0.7,
       maxTokens: 4096,

@@ -26,12 +26,22 @@ const wss = new WebSocketServer({ server });
 
 // Configuration
 const PORT = process.env.PORT || 8080;
-const OLLAMA_HOST = process.env.OLLAMA_HOST || '192.168.4.88:11434';
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'https://editor.pinkchairparley.org';
 const WORKSPACE_DIR = process.env.WORKSPACE_DIR || path.join(os.homedir(), 'ai-editor-workspace');
 const REMOTE_SERVERS = JSON.parse(process.env.REMOTE_SERVERS || '[]');
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://project-m7f3zwyow-deez-nuts-projects-54dd1620.vercel.app',
+    'https://project-production-a055.up.railway.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Upload file endpoint - must be defined BEFORE JSON middleware
@@ -501,7 +511,7 @@ When you need to perform actions, use these formats:
 
 Respond in a helpful, concise manner focused on coding tasks.`;
 
-    const response = await axios.post(`http://${OLLAMA_HOST}/api/generate`, {
+    const response = await axios.post(`${OLLAMA_HOST}/api/generate`, {
       model,
       prompt: message,
       system: systemPrompt,
@@ -528,11 +538,85 @@ Respond in a helpful, concise manner focused on coding tasks.`;
 // Get available AI models
 app.get('/api/models', async (req, res) => {
   try {
-    const response = await axios.get(`http://${OLLAMA_HOST}/api/tags`);
+    const response = await axios.get(`${OLLAMA_HOST}/api/tags`);
     res.json(response.data);
   } catch (error) {
     console.error('Error fetching models:', error);
     res.status(500).json({ error: 'Failed to fetch models' });
+  }
+});
+
+// Ollama health check endpoint
+app.get('/api/ollama/health', async (req, res) => {
+  try {
+    console.log('🔍 Checking Ollama health at:', `${OLLAMA_HOST}/api/tags`);
+    const response = await axios.get(`${OLLAMA_HOST}/api/tags`, {
+      timeout: 5000
+    });
+    res.json({ 
+      status: 'healthy', 
+      models: response.data.models || [],
+      endpoint: OLLAMA_HOST
+    });
+  } catch (error) {
+    console.error('❌ Ollama health check failed:', error.message);
+    res.status(503).json({ 
+      status: 'unhealthy', 
+      error: error.message,
+      endpoint: OLLAMA_HOST
+    });
+  }
+});
+
+// Ollama proxy endpoints
+app.get('/api/ollama/api/tags', async (req, res) => {
+  try {
+    const response = await axios.get(`${OLLAMA_HOST}/api/tags`, {
+      timeout: 10000
+    });
+    res.json(response.data);
+  } catch (error) {
+    console.error('❌ Ollama tags request failed:', error.message);
+    res.status(503).json({ 
+      error: 'Failed to fetch Ollama models',
+      details: error.message
+    });
+  }
+});
+
+app.post('/api/ollama/api/chat', async (req, res) => {
+  try {
+    const response = await axios.post(`${OLLAMA_HOST}/api/chat`, req.body, {
+      timeout: 300000, // 5 minutes for LLM responses
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    res.json(response.data);
+  } catch (error) {
+    console.error('❌ Ollama chat request failed:', error.message);
+    res.status(503).json({ 
+      error: 'Failed to get response from Ollama',
+      details: error.message
+    });
+  }
+});
+
+app.post('/api/ollama/api/generate', async (req, res) => {
+  try {
+    const response = await axios.post(`${OLLAMA_HOST}/api/generate`, req.body, {
+      timeout: 300000, // 5 minutes for LLM responses
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    res.json(response.data);
+  } catch (error) {
+    console.error('❌ Ollama generate request failed:', error.message);
+    res.status(503).json({ 
+      error: 'Failed to get response from Ollama',
+      details: error.message
+    });
   }
 });
 
@@ -563,7 +647,7 @@ You can help with:
 
 Respond in a helpful, concise manner focused on coding tasks.`;
 
-    const response = await axios.post(`http://${OLLAMA_HOST}/api/generate`, {
+    const response = await axios.post(`${OLLAMA_HOST}/api/generate`, {
       model: 'llama3.1',
       prompt: message,
       system: systemPrompt,
@@ -595,7 +679,7 @@ app.post('/api/ai/complete', async (req, res) => {
     
     const prompt = `Complete the following ${language || 'code'}:\n\n${code}\n\nCompletion:`;
     
-    const response = await axios.post(`http://${OLLAMA_HOST}/api/generate`, {
+    const response = await axios.post(`${OLLAMA_HOST}/api/generate`, {
       model: 'llama3.1',
       prompt: prompt,
       stream: false,
