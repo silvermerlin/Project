@@ -13,8 +13,8 @@ import {
   X,
   Plus
 } from 'lucide-react';
-import { useTerminal } from '../contexts/TerminalContext';
 import { cn } from '../utils';
+import { apiService } from '../services/api';
 
 interface TerminalInstance {
   id: string;
@@ -23,6 +23,7 @@ interface TerminalInstance {
   isActive: boolean;
   history: string[];
   currentCommand: string;
+  output: string[];
 }
 
 interface EnhancedTerminalProps {
@@ -55,14 +56,19 @@ const EnhancedTerminal: React.FC<EnhancedTerminalProps> = ({ className, onOpenIn
     {
       id: '1',
       name: 'Terminal 1',
-      cwd: '~/project',
+      cwd: '/workspace',
       isActive: true,
       history: [],
       currentCommand: '',
+      output: [
+        'Welcome to AI Code Editor Terminal',
+        'AI agents can now execute commands through this terminal',
+        'Connected to Railway backend',
+        ''
+      ],
     }
   ]);
   const [activeTerminalId, setActiveTerminalId] = useState('1');
-  const { lines, executeCommand, clearTerminal } = useTerminal();
   const [isExecuting, setIsExecuting] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -77,7 +83,7 @@ const EnhancedTerminal: React.FC<EnhancedTerminalProps> = ({ className, onOpenIn
 
   useEffect(() => {
     scrollToBottom();
-  }, [lines]);
+  }, [terminals]);
 
   useEffect(() => {
     if (activeTab === 'terminal' && inputRef.current) {
@@ -89,10 +95,16 @@ const EnhancedTerminal: React.FC<EnhancedTerminalProps> = ({ className, onOpenIn
     const newTerminal: TerminalInstance = {
       id: Date.now().toString(),
       name: `Terminal ${terminals.length + 1}`,
-      cwd: activeTerminal?.cwd || '~/project',
+      cwd: activeTerminal?.cwd || '/workspace',
       isActive: false,
       history: [],
       currentCommand: '',
+      output: [
+        'Welcome to AI Code Editor Terminal',
+        'AI agents can now execute commands through this terminal',
+        'Connected to Railway backend',
+        ''
+      ],
     };
     
     setTerminals(prev => prev.map(t => ({ ...t, isActive: false })).concat(newTerminal));
@@ -152,19 +164,32 @@ const EnhancedTerminal: React.FC<EnhancedTerminalProps> = ({ className, onOpenIn
 
     setIsExecuting(true);
 
-    // Add to terminal history
+    // Add command to output
     setTerminals(prev => prev.map(t => 
       t.id === activeTerminalId 
         ? { 
             ...t, 
             history: [...t.history, command],
-            currentCommand: ''
+            currentCommand: '',
+            output: [...t.output, `$ ${command}`]
           }
         : t
     ));
 
     try {
-      await executeCommand(command);
+      // Execute command on Railway backend
+      const result = await apiService.executeCommand(command, activeTerminal.cwd);
+      
+      // Add output to terminal
+      setTerminals(prev => prev.map(t => 
+        t.id === activeTerminalId 
+          ? { 
+              ...t, 
+              output: [...t.output, result.output || 'Command executed successfully'],
+              cwd: result.cwd || t.cwd
+            }
+          : t
+      ));
       
       // Update CWD for certain commands
       if (command.startsWith('cd ')) {
@@ -177,6 +202,15 @@ const EnhancedTerminal: React.FC<EnhancedTerminalProps> = ({ className, onOpenIn
       }
     } catch (error) {
       console.error('Command execution failed:', error);
+      // Add error to output
+      setTerminals(prev => prev.map(t => 
+        t.id === activeTerminalId 
+          ? { 
+              ...t, 
+              output: [...t.output, `Error: ${error instanceof Error ? error.message : 'Command failed'}`]
+            }
+          : t
+      ));
     } finally {
       setIsExecuting(false);
     }
@@ -190,12 +224,16 @@ const EnhancedTerminal: React.FC<EnhancedTerminalProps> = ({ className, onOpenIn
   };
 
   const copyTerminalContent = () => {
-    const content = lines.map(line => line.content).join('\n');
+    const content = activeTerminal?.output.join('\n') || '';
     navigator.clipboard.writeText(content);
   };
 
   const handleClearTerminal = () => {
-    clearTerminal();
+    setTerminals(prev => prev.map(t => 
+      t.id === activeTerminalId 
+        ? { ...t, output: ['Terminal cleared', ''] }
+        : t
+    ));
   };
 
   // const openInTerminal = (path: string) => {
@@ -289,17 +327,18 @@ const EnhancedTerminal: React.FC<EnhancedTerminalProps> = ({ className, onOpenIn
               ref={terminalRef}
               className="flex-1 overflow-y-auto editor-scrollbar p-4 font-mono text-sm"
             >
-              {lines.map((line) => (
+              {activeTerminal?.output.map((line, index) => (
                 <div
-                  key={line.id}
+                  key={index}
                   className={cn(
                     "mb-1 whitespace-pre-wrap break-words",
-                    line.type === 'command' && "text-editor-accent",
-                    line.type === 'output' && "text-editor-text",
-                    line.type === 'error' && "text-red-400"
+                    line.startsWith('$ ') && "text-editor-accent",
+                    line.startsWith('Error: ') && "text-red-400",
+                    line.startsWith('Welcome to AI Code Editor Terminal') && "text-editor-text-secondary",
+                    line.startsWith('Connected to Railway backend') && "text-editor-text-secondary"
                   )}
                 >
-                  {line.content}
+                  {line}
                 </div>
               ))}
               

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { TerminalProvider, useTerminal } from './contexts/TerminalContext';
@@ -9,95 +9,173 @@ import AgentWorkflowUI from './components/AgentWorkflowUI';
 import EnhancedTerminal from './components/EnhancedTerminal';
 import SettingsModal from './components/SettingsModal';
 import MenuBar from './components/MenuBar';
-import { 
-  FileItem, 
-  FileSystemItem, 
-  createNewFile, 
-  readFileFromInput, 
-  readDirectoryFromInput, 
-  loadFileContent,
-  findFileById,
-  updateFileInTree,
-  removeFileFromTree,
-  toggleFolderExpansion
-} from './utils/fileUtils';
+import BackendStatus from './components/BackendStatus';
+import { apiService } from './services/api';
+import { wsService } from './services/websocket';
+import { isRailwayBackend } from './config/api';
+
+// Types for backend integration
+interface BackendFileInfo {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  modified?: string;
+  isDirectory: boolean;
+}
+
+interface FileItem {
+  id: string;
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  content?: string;
+  isModified: boolean;
+  isLoaded: boolean;
+  children?: FileItem[];
+  isExpanded?: boolean;
+}
 
 const AppContent: React.FC = () => {
   const { } = useSettings();
   const { } = useTerminal();
   
-  // Simple state management
-  const [fileSystemItems, setFileSystemItems] = useState<FileSystemItem[]>([]);
+  // State management
+  const [fileSystemItems, setFileSystemItems] = useState<FileItem[]>([]);
   const [openFiles, setOpenFiles] = useState<FileItem[]>([]);
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentPath, setCurrentPath] = useState('/');
+  const [backendConnected, setBackendConnected] = useState(false);
 
   // Get active file
   const activeFile = openFiles.find(f => f.id === activeFileId) || null;
 
-  // File operations
-  const handleNewFile = useCallback((parentFolderId?: string) => {
-    const fileName = prompt('Enter file name:');
-    if (fileName) {
-      const newFile = createNewFile(fileName, parentFolderId);
-      setFileSystemItems(prev => [...prev, newFile]);
-      setOpenFiles(prev => [...prev, newFile]);
-      setActiveFileId(newFile.id);
-    }
+  // Initialize backend connection
+  useEffect(() => {
+    const initializeBackend = async () => {
+      try {
+        // Test backend connection
+        await apiService.healthCheck();
+        setBackendConnected(true);
+        
+        // Connect WebSocket
+        await wsService.connect();
+        
+        // Load initial file system
+        await loadFileSystem();
+        
+        console.log('✅ Backend connected successfully');
+      } catch (error) {
+        console.error('❌ Failed to connect to backend:', error);
+        setBackendConnected(false);
+      }
+    };
+
+    initializeBackend();
   }, []);
 
+  // Load file system from backend
+  const loadFileSystem = async (path: string = '/') => {
+    try {
+      setIsLoading(true);
+      const files = await apiService.listFiles(path);
+      
+      const fileItems: FileItem[] = files.map((file: BackendFileInfo) => ({
+        id: file.path,
+        name: file.name,
+        path: file.path,
+        type: file.type,
+        isModified: false,
+        isLoaded: false,
+        children: file.isDirectory ? [] : undefined,
+        isExpanded: false
+      }));
+
+      setFileSystemItems(fileItems);
+      setCurrentPath(path);
+    } catch (error) {
+      console.error('Error loading file system:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // File operations with backend integration
+  const handleNewFile = useCallback(async (parentFolderId?: string) => {
+    const fileName = prompt('Enter file name:');
+    if (!fileName) return;
+
+    try {
+      const filePath = parentFolderId ? `${parentFolderId}/${fileName}` : `/${fileName}`;
+      await apiService.createFile(filePath);
+      
+      // Reload file system
+      await loadFileSystem(currentPath);
+    } catch (error) {
+      console.error('Error creating file:', error);
+      alert('Failed to create file');
+    }
+  }, [currentPath]);
+
   const handleOpenFiles = useCallback(async (fileList: FileList) => {
-    const newFiles: FileItem[] = [];
-    
-    for (let i = 0; i < fileList.length; i++) {
-      const file = fileList[i];
-      try {
-        const fileItem = await readFileFromInput(file);
-        newFiles.push(fileItem);
-      } catch (error) {
-        console.error('Error reading file:', error);
+    try {
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        const filePath = `/${file.name}`;
+        
+        // Upload file to backend
+        await apiService.uploadFile(file, filePath);
       }
+      
+      // Reload file system
+      await loadFileSystem(currentPath);
+    } catch (error) {
+      console.error('Error uploading files:', error);
+      alert('Failed to upload files');
     }
-    
-    if (newFiles.length > 0) {
-      setFileSystemItems(prev => [...prev, ...newFiles]);
-      setOpenFiles(prev => [...prev, ...newFiles]);
-      setActiveFileId(newFiles[0].id);
-    }
-  }, []);
+  }, [currentPath]);
 
   const handleOpenFolder = useCallback(async (fileList: FileList) => {
     try {
-      const folderStructure = await readDirectoryFromInput(fileList);
-      setFileSystemItems(prev => [...prev, folderStructure]);
-      console.log('Folder loaded successfully. Click on files to open them.');
-    } catch (error) {
-      console.error('Error reading folder:', error);
-    }
-  }, []);
-
-  const handleFileSelect = useCallback(async (fileId: string) => {
-    const file = findFileById(fileSystemItems, fileId);
-    if (file && file.type === 'file') {
-      // Check if file is already open
-      const isAlreadyOpen = openFiles.some(f => f.id === fileId);
-      
-      if (!isAlreadyOpen) {
-        // Load file content if needed
-        let fileToOpen = file;
-        if (!file.isLoaded && file.file) {
-          try {
-            fileToOpen = await loadFileContent(file);
-            setFileSystemItems(prev => updateFileInTree(prev, fileId, fileToOpen));
-          } catch (error) {
-            console.error('Error loading file content:', error);
-          }
-        }
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        const filePath = `/${file.webkitRelativePath || file.name}`;
         
-        setOpenFiles(prev => [...prev, fileToOpen]);
+        // Upload file to backend
+        await apiService.uploadFile(file, filePath);
       }
       
+      // Reload file system
+      await loadFileSystem(currentPath);
+    } catch (error) {
+      console.error('Error uploading folder:', error);
+      alert('Failed to upload folder');
+    }
+  }, [currentPath]);
+
+  const handleFileSelect = useCallback(async (fileId: string) => {
+    const file = fileSystemItems.find(f => f.id === fileId);
+    if (!file || file.type !== 'file') return;
+
+    // Check if file is already open
+    const isAlreadyOpen = openFiles.some(f => f.id === fileId);
+    if (isAlreadyOpen) {
       setActiveFileId(fileId);
+      return;
+    }
+
+    try {
+      // Load file content from backend
+      const content = await apiService.getFileContent(file.path);
+      const fileWithContent = { ...file, content, isLoaded: true };
+      
+      setOpenFiles(prev => [...prev, fileWithContent]);
+      setActiveFileId(fileId);
+    } catch (error) {
+      console.error('Error loading file content:', error);
+      alert('Failed to load file content');
     }
   }, [fileSystemItems, openFiles]);
 
@@ -118,62 +196,111 @@ const AppContent: React.FC = () => {
     }
   }, [activeFileId, openFiles]);
 
-  const handleToggleFolder = useCallback((folderId: string) => {
-    setFileSystemItems(prev => toggleFolderExpansion(prev, folderId));
-  }, []);
+  const handleToggleFolder = useCallback(async (folderId: string) => {
+    const folder = fileSystemItems.find(f => f.id === folderId);
+    if (!folder || folder.type !== 'directory') return;
+
+    try {
+      if (!folder.isExpanded) {
+        // Load folder contents from backend
+        const files = await apiService.listFiles(folder.path);
+        const children: FileItem[] = files.map((file: BackendFileInfo) => ({
+          id: file.path,
+          name: file.name,
+          path: file.path,
+          type: file.type,
+          isModified: false,
+          isLoaded: false,
+          children: file.isDirectory ? [] : undefined,
+          isExpanded: false
+        }));
+
+        setFileSystemItems(prev => prev.map(f => 
+          f.id === folderId ? { ...f, children, isExpanded: true } : f
+        ));
+      } else {
+        // Collapse folder
+        setFileSystemItems(prev => prev.map(f => 
+          f.id === folderId ? { ...f, isExpanded: false } : f
+        ));
+      }
+    } catch (error) {
+      console.error('Error loading folder contents:', error);
+    }
+  }, [fileSystemItems]);
 
   const handleEditorChange = useCallback((content: string) => {
     if (activeFileId) {
       setOpenFiles(prev => prev.map(f => 
         f.id === activeFileId ? { ...f, content, isModified: true } : f
       ));
-      setFileSystemItems(prev => updateFileInTree(prev, activeFileId, { content, isModified: true }));
     }
   }, [activeFileId]);
 
-  const handleSaveFile = useCallback((fileId?: string) => {
+  const handleSaveFile = useCallback(async (fileId?: string) => {
     const targetFileId = fileId || activeFileId;
-    if (targetFileId) {
+    if (!targetFileId) return;
+
+    const file = openFiles.find(f => f.id === targetFileId);
+    if (!file) return;
+
+    try {
+      await apiService.saveFileContent(file.path, file.content || '');
+      
       setOpenFiles(prev => prev.map(f => 
         f.id === targetFileId ? { ...f, isModified: false } : f
       ));
-      setFileSystemItems(prev => updateFileInTree(prev, targetFileId, { isModified: false }));
+      
       console.log('File saved:', targetFileId);
+    } catch (error) {
+      console.error('Error saving file:', error);
+      alert('Failed to save file');
     }
-  }, [activeFileId]);
+  }, [activeFileId, openFiles]);
 
-  // const handleDownloadFile = useCallback((fileId: string) => {
-  //   const file = findFileById(fileSystemItems, fileId);
-  //   if (file && file.type === 'file') {
-  //     downloadFile(file);
-  //   }
-  // }, [fileSystemItems]);
+  const handleDeleteFile = useCallback(async (fileId: string) => {
+    const file = fileSystemItems.find(f => f.id === fileId);
+    if (!file) return;
 
-  const handleDeleteFile = useCallback((fileId: string) => {
-    setFileSystemItems(prev => removeFileFromTree(prev, fileId));
-    setOpenFiles(prev => prev.filter(f => f.id !== fileId));
-    
-    if (fileId === activeFileId) {
-      const remainingFiles = openFiles.filter(f => f.id !== fileId);
-      if (remainingFiles.length > 0) {
-        setActiveFileId(remainingFiles[0].id);
-      } else {
-        setActiveFileId(null);
+    try {
+      await apiService.deleteFile(file.path);
+      
+      setFileSystemItems(prev => prev.filter(f => f.id !== fileId));
+      setOpenFiles(prev => prev.filter(f => f.id !== fileId));
+      
+      if (fileId === activeFileId) {
+        const remainingFiles = openFiles.filter(f => f.id !== fileId);
+        if (remainingFiles.length > 0) {
+          setActiveFileId(remainingFiles[0].id);
+        } else {
+          setActiveFileId(null);
+        }
       }
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      alert('Failed to delete file');
     }
   }, [fileSystemItems, activeFileId, openFiles]);
 
-  const handleRenameFile = useCallback((fileId: string, newName: string) => {
-    setFileSystemItems(prev => updateFileInTree(prev, fileId, { name: newName }));
-    setOpenFiles(prev => prev.map(f => 
-      f.id === fileId ? { ...f, name: newName } : f
-    ));
-  }, []);
+  const handleRenameFile = useCallback(async (fileId: string, newName: string) => {
+    const file = fileSystemItems.find(f => f.id === fileId);
+    if (!file) return;
+
+    try {
+      const newPath = file.path.replace(file.name, newName);
+      await apiService.renameFile(file.path, newPath);
+      
+      // Reload file system
+      await loadFileSystem(currentPath);
+    } catch (error) {
+      console.error('Error renaming file:', error);
+      alert('Failed to rename file');
+    }
+  }, [fileSystemItems, currentPath]);
 
   const handleOpenInTerminal = useCallback((path: string) => {
-    // This will be integrated with the terminal system
+    // This will be handled by the terminal component
     console.log('Opening terminal at path:', path);
-    // The terminal component will handle the CWD change internally
   }, []);
 
   return (
@@ -186,6 +313,11 @@ const AppContent: React.FC = () => {
         onSaveFile={() => handleSaveFile()}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
+      
+      {/* Backend Status Bar */}
+      <div className="px-4 py-1 bg-editor-border border-b border-editor-border">
+        <BackendStatus />
+      </div>
       
       {/* Main Content */}
       <div className="flex-1 min-h-0">
