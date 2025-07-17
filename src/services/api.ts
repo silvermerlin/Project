@@ -100,23 +100,48 @@ class ApiService {
     formData.append('file', file);
     formData.append('path', path);
 
-    // For FormData, we need to completely override headers to avoid Content-Type conflicts
-    const url = getApiUrl(API_ENDPOINTS.uploadFile);
-    const response = await fetch(url, {
-      method: 'POST',
-      body: formData,
-      // Don't set Content-Type - let browser set it automatically for FormData
+    console.log('📤 Uploading file:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      targetPath: path
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    // For FormData, we need to completely override headers to avoid Content-Type conflicts
+    const url = getApiUrl(API_ENDPOINTS.uploadFile);
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        // Don't set Content-Type - let browser set it automatically for FormData
+      });
 
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      return await response.json();
-    } else {
-      return await response.text() as any;
+      console.log('📥 Upload response:', {
+        status: response.status,
+        statusText: response.statusText,
+        contentType: response.headers.get('content-type')
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Upload failed:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const result = await response.json();
+        console.log('✅ Upload successful:', result);
+        return result;
+      } else {
+        const result = await response.text();
+        console.log('✅ Upload successful (text):', result);
+        return result as any;
+      }
+    } catch (error) {
+      console.error('❌ Upload error:', error);
+      throw error;
     }
   }
 
