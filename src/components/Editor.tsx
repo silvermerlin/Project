@@ -169,6 +169,8 @@ const Editor: React.FC<EditorProps> = ({ file, onChange, onSave }) => {
     }
   };
 
+  console.log('🎯 Editor render - file:', file ? { id: file.id, name: file.name, contentLength: file.content?.length || 0 } : null);
+  
   if (!file) {
     return (
       <div className="flex items-center justify-center h-full bg-editor-bg">
@@ -185,7 +187,7 @@ const Editor: React.FC<EditorProps> = ({ file, onChange, onSave }) => {
       <MonacoEditor
         height="100%"
         language={file.language}
-        value={file.content}
+        value={file.content || ''}
         onChange={handleEditorChange}
         onMount={handleEditorDidMount}
         options={{

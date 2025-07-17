@@ -311,8 +311,12 @@ app.post('/api/terminal', async (req, res) => {
     const { promisify } = await import('util');
     const execAsync = promisify(exec);
     
+    // Ensure the working directory exists
+    const workingDir = path.join(WORKSPACE_DIR, cwd);
+    await fs.mkdir(workingDir, { recursive: true });
+    
     const result = await execAsync(command, { 
-      cwd: path.join(WORKSPACE_DIR, cwd),
+      cwd: workingDir,
       timeout: 30000 
     });
     

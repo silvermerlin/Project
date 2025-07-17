@@ -59,7 +59,8 @@ class ApiService {
   }
 
   async getFileContent(path: string): Promise<string> {
-    return this.request(`${API_ENDPOINTS.getFileContent}?path=${encodeURIComponent(path)}`);
+    const response = await this.request<{ content: string }>(`${API_ENDPOINTS.getFileContent}?path=${encodeURIComponent(path)}`);
+    return response.content;
   }
 
   async saveFileContent(path: string, content: string): Promise<{ success: boolean }> {

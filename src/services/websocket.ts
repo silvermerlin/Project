@@ -195,6 +195,9 @@ class WebSocketService {
         case WS_EVENTS.ERROR:
           this.eventHandlers.onError?.(message.data);
           break;
+        case 'pong':
+          // Handle heartbeat response silently
+          break;
         default:
           console.warn('⚠️ Unknown WebSocket message type:', message.type);
       }

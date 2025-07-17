@@ -214,8 +214,8 @@ const AppContent: React.FC = () => {
       console.log('📄 Loading file content from backend for path:', file.path);
       // Load file content from backend
       const content = await apiService.getFileContent(file.path);
-      console.log('📄 File content loaded, length:', content.length);
-      const fileWithContent = { ...file, content, isLoaded: true };
+      console.log('📄 File content loaded, length:', content?.length || 0);
+      const fileWithContent = { ...file, content: content || '', isLoaded: true };
       
       setOpenFiles(prev => [...prev, fileWithContent]);
       setActiveFileId(fileId);
