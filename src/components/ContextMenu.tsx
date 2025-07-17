@@ -6,7 +6,6 @@ import {
   Trash2, 
   Edit, 
   Copy, 
-  Cut, 
   Terminal,
   Play,
   Settings,
@@ -17,11 +16,11 @@ import {
 } from 'lucide-react';
 
 export interface ContextMenuItem {
-  id: string;
-  label: string;
+  id?: string;
+  label?: string;
   icon?: React.ReactNode;
   shortcut?: string;
-  action: () => void;
+  action?: () => void;
   disabled?: boolean;
   separator?: boolean;
 }
@@ -44,7 +43,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
   if (!isOpen) return null;
 
   const handleItemClick = (item: ContextMenuItem) => {
-    if (!item.disabled) {
+    if (!item.disabled && item.action) {
       item.action();
     }
     onClose();
@@ -63,7 +62,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
         className="fixed z-50 bg-editor-sidebar border border-editor-border rounded-md shadow-lg py-1 min-w-48"
         style={{ left: x, top: y }}
       >
-        {items.map((item, index) => (
+        {items.map((item) => (
           <React.Fragment key={item.id}>
             {item.separator ? (
               <div className="border-t border-editor-border my-1" />

@@ -8,18 +8,10 @@ import {
   Zap,
   Copy, 
   Trash2,
-  Play,
-  Square,
-  Minus,
   Maximize2,
   Minimize2,
-  MoreHorizontal,
   X,
-  Plus,
-  Folder,
-  GitBranch,
-  Settings,
-  RefreshCw
+  Plus
 } from 'lucide-react';
 import { useTerminal } from '../contexts/TerminalContext';
 import { cn } from '../utils';
@@ -70,7 +62,7 @@ const EnhancedTerminal: React.FC<EnhancedTerminalProps> = ({ className, onOpenIn
     }
   ]);
   const [activeTerminalId, setActiveTerminalId] = useState('1');
-  const { lines, executeCommand, clearTerminal, getHistory } = useTerminal();
+  const { lines, executeCommand, clearTerminal } = useTerminal();
   const [isExecuting, setIsExecuting] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -206,17 +198,17 @@ const EnhancedTerminal: React.FC<EnhancedTerminalProps> = ({ className, onOpenIn
     clearTerminal();
   };
 
-  const openInTerminal = (path: string) => {
-    if (onOpenInTerminal) {
-      onOpenInTerminal(path);
-    }
-    // Update current terminal's CWD
-    setTerminals(prev => prev.map(t => 
-      t.id === activeTerminalId 
-        ? { ...t, cwd: path }
-        : t
-    ));
-  };
+  // const openInTerminal = (path: string) => {
+  //   if (onOpenInTerminal) {
+  //     onOpenInTerminal(path);
+  //   }
+  //   // Update current terminal's CWD
+  //   setTerminals(prev => prev.map(t => 
+  //     t.id === activeTerminalId 
+  //       ? { ...t, cwd: path }
+  //       : t
+  //   ));
+  // };
 
   const renderTerminalTabs = () => (
     <div className="flex items-center bg-editor-sidebar border-b border-editor-border">

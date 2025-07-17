@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { TerminalProvider, useTerminal } from './contexts/TerminalContext';
@@ -11,14 +11,11 @@ import SettingsModal from './components/SettingsModal';
 import MenuBar from './components/MenuBar';
 import { 
   FileItem, 
-  FolderItem, 
   FileSystemItem, 
   createNewFile, 
   readFileFromInput, 
   readDirectoryFromInput, 
   loadFileContent,
-  downloadFile, 
-  getAllFiles,
   findFileById,
   updateFileInTree,
   removeFileFromTree,
@@ -26,8 +23,8 @@ import {
 } from './utils/fileUtils';
 
 const AppContent: React.FC = () => {
-  const { settings } = useSettings();
-  const { getHistory, executeCommand } = useTerminal();
+  const { } = useSettings();
+  const { } = useTerminal();
   
   // Simple state management
   const [fileSystemItems, setFileSystemItems] = useState<FileSystemItem[]>([]);
@@ -145,12 +142,12 @@ const AppContent: React.FC = () => {
     }
   }, [activeFileId]);
 
-  const handleDownloadFile = useCallback((fileId: string) => {
-    const file = findFileById(fileSystemItems, fileId);
-    if (file && file.type === 'file') {
-      downloadFile(file);
-    }
-  }, [fileSystemItems]);
+  // const handleDownloadFile = useCallback((fileId: string) => {
+  //   const file = findFileById(fileSystemItems, fileId);
+  //   if (file && file.type === 'file') {
+  //     downloadFile(file);
+  //   }
+  // }, [fileSystemItems]);
 
   const handleDeleteFile = useCallback((fileId: string) => {
     setFileSystemItems(prev => removeFileFromTree(prev, fileId));
@@ -184,8 +181,8 @@ const AppContent: React.FC = () => {
       {/* Top Menu Bar */}
       <MenuBar
         onNewFile={handleNewFile}
-        onOpenFile={() => document.querySelector('input[type="file"]:not([webkitdirectory])')?.click()}
-        onOpenFolder={() => document.querySelector('input[type="file"][webkitdirectory]')?.click()}
+        onOpenFile={() => (document.querySelector('input[type="file"]:not([webkitdirectory])') as HTMLInputElement)?.click()}
+        onOpenFolder={() => (document.querySelector('input[type="file"][webkitdirectory]') as HTMLInputElement)?.click()}
         onSaveFile={() => handleSaveFile()}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
@@ -202,7 +199,6 @@ const AppContent: React.FC = () => {
               onNewFile={handleNewFile}
               onOpenFile={handleOpenFiles}
               onOpenFolder={handleOpenFolder}
-              onDownloadFile={handleDownloadFile}
               onToggleFolder={handleToggleFolder}
               onOpenSettings={() => setIsSettingsOpen(true)}
               onDeleteFile={handleDeleteFile}

@@ -7,56 +7,25 @@ import {
   ChevronRight,
   ChevronDown,
   Plus,
-  Upload,
-  Download,
   Search,
   Settings,
-  Code,
-  Sparkles,
-  Package,
   GitBranch,
   Play,
   Bug,
   Puzzle,
-  Users,
-  Database,
   Zap,
   Globe,
   Server,
-  Monitor,
-  Layers,
-  Box,
-  Grid3x3,
   Braces,
-  Terminal,
-  Cloud,
   Shield,
-  Workflow,
-  Beaker,
-  FileJson,
   Palette,
   Cpu,
-  Activity,
   Eye,
-  HelpCircle,
   User,
-  Clock,
-  BookOpen,
-  Star,
-  Heart,
-  Coffee,
-  Lightbulb,
-  Target,
-  Rocket,
-  Trophy,
   Gem,
-  Crown,
-  Flame,
-  Thunder,
-  Atom,
-  Hexagon,
-  Octagon,
-  Trash2
+  Trash2,
+  Target,
+  Lightbulb
 } from 'lucide-react';
 import { FileItem, FolderItem, FileSystemItem } from '../utils/fileUtils';
 import { cn } from '../utils';
@@ -68,7 +37,6 @@ interface SidebarProps {
   onNewFile: (parentFolderId?: string) => void;
   onOpenFile: (files: FileList) => void;
   onOpenFolder: (files: FileList) => void;
-  onDownloadFile: (fileId: string) => void;
   onToggleFolder: (folderId: string) => void;
   onOpenSettings: () => void;
   onDeleteFile: (fileId: string) => void;
@@ -126,7 +94,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   onNewFile,
   onOpenFile,
   onOpenFolder,
-  onDownloadFile,
   onToggleFolder,
   onOpenSettings,
   onDeleteFile,
@@ -339,7 +306,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <h3 className="text-xs font-semibold text-editor-text-secondary uppercase tracking-wide">Explorer</h3>
           <div className="flex items-center gap-1">
             <button
-              onClick={onNewFile}
+              onClick={() => onNewFile()}
               className="p-1 rounded hover:bg-editor-border transition-colors"
               title="New File"
             >
@@ -357,7 +324,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         
         <div className="space-y-2">
           <button
-            onClick={onNewFile}
+            onClick={() => onNewFile()}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm bg-editor-accent hover:bg-editor-accent-hover text-white rounded transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -676,6 +643,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         multiple
         onChange={handleFolderInputChange}
         className="hidden"
+        // @ts-ignore
       />
     </div>
   );

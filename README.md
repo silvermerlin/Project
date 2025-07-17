@@ -1,198 +1,139 @@
 # AI Code Editor
 
-A modern, responsive code editor built with React, TypeScript, and Monaco Editor. This project aims to create a Cursor-like experience with AI-focused features, including folder support, AI chat, and integrated terminal.
+A modern, browser-based code editor with AI assistance, built with React, TypeScript, and Vite.
 
-## Features
+## 🚀 Features
 
-### 📝 **Core Editor Features**
-- ✨ **Monaco Editor Integration**: Full-featured code editor with syntax highlighting
-- 🎨 **Modern Dark Theme**: Cursor-inspired dark theme with smooth animations
-- 📱 **Responsive Design**: Fully responsive with resizable panels
-- ⌨️ **Keyboard Shortcuts**: Common shortcuts for enhanced productivity
+- **Modern UI**: VS Code-inspired interface with dark theme
+- **File Management**: Upload folders, create files, right-click context menus
+- **Multi-Terminal**: Multiple terminal instances with command history
+- **AI Integration**: Ready for AI agent workflows
+- **Real-time Editing**: Syntax highlighting and live code editing
+- **Responsive Design**: Works on desktop and tablet devices
 
-### 📁 **File & Folder Management**
-- 📂 **Folder Support**: Open entire folders/projects with folder tree navigation
-- 📄 **File Operations**: Create, open, edit, and save files
-- 🌳 **Folder Tree**: Expandable folder structure with file icons
-- 🏷️ **Tab System**: Multiple file tabs with close and save functionality
-- 💾 **Auto-persistence**: Automatic state saving to localStorage
+## 🛠️ Tech Stack
 
-### 🤖 **AI Features**
-- 💬 **AI Chat Panel**: Standalone AI assistant chat interface (right panel)
-- 🎯 **Code-focused**: Designed for code-related queries and assistance
-- 📋 **Copy Support**: Copy AI responses with one click
-- ⏱️ **Real-time**: Simulated AI responses with typing indicators
+- **Frontend**: React 18, TypeScript, Vite
+- **UI Components**: Lucide React icons, Tailwind CSS
+- **State Management**: React Context API
+- **Terminal**: Custom terminal implementation
+- **File System**: Browser-based file handling
 
-### 🖥️ **Terminal Integration**
-- 🖥️ **Built-in Terminal**: Integrated terminal at the bottom
-- 📜 **Command History**: Arrow keys for command navigation
-- 🎨 **Syntax Highlighting**: Colored output for commands and errors
-- 📋 **Terminal Actions**: Copy content and clear terminal
+## 📦 Installation
 
-### 🔍 **Language Support**
-- Support for 25+ programming languages with syntax highlighting
-- Automatic language detection from file extensions
-- Custom file icons for different languages
+### Prerequisites
+- Node.js 18+ 
+- npm or yarn
 
-## Layout
+### Local Development
 
-The editor features a **three-panel layout** similar to Cursor:
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd ai-code-editor
+   ```
 
-```
-┌─────────────┬───────────────────────────┬─────────────┐
-│   Sidebar   │     Main Editor Area      │  AI Chat    │
-│             │  ┌─────────────────────┐  │             │
-│ • Explorer  │  │    Tab Bar          │  │ • Messages  │
-│ • Files     │  │                     │  │ • Input     │
-│ • Folders   │  │    Monaco Editor    │  │ • Copy      │
-│ • Actions   │  │                     │  │             │
-│             │  ├─────────────────────┤  │             │
-│             │  │    Terminal         │  │             │
-│             │  │                     │  │             │
-└─────────────┴─────────────────────────┴─────────────┘
-```
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-## Keyboard Shortcuts
+3. **Start development server**
+   ```bash
+   npm run dev
+   ```
 
-- `Ctrl/Cmd + N` - New file
-- `Ctrl/Cmd + O` - Open file
-- `Ctrl/Cmd + S` - Save current file
-- `Ctrl/Cmd + W` - Close current tab
-- `Ctrl/Cmd + Tab` - Switch to next tab
-- `Enter` - Send AI chat message
-- `Shift + Enter` - New line in AI chat
-- `Up/Down arrows` - Navigate terminal history
+4. **Open in browser**
+   Navigate to `http://localhost:3000`
 
-## Getting Started
+## 🚀 Deployment
 
-1. **Install dependencies:**
+### Vercel (Recommended)
+
+1. **Push to GitHub**
+   ```bash
+   git add .
+   git commit -m "Initial commit"
+   git push origin main
+   ```
+
+2. **Deploy on Vercel**
+   - Go to [vercel.com](https://vercel.com)
+   - Connect your GitHub account
+   - Import your repository
+   - Vercel will automatically detect it's a Vite app and deploy
+
+### Manual Build
+
 ```bash
-npm install
+npm run build
+npm run preview
 ```
 
-2. **Start the development server:**
-```bash
-npm run dev
+## 🎯 Usage
+
+### File Operations
+- **Upload Folder**: Click "Open Folder" to upload entire project folders
+- **Create Files**: Right-click on folders → "New File..."
+- **Context Menus**: Right-click on files/folders for options
+- **File Editing**: Click on files to open them in the editor
+
+### Terminal
+- **Multiple Terminals**: Click the + button to create new terminals
+- **Command History**: Use arrow keys to navigate command history
+- **Path Integration**: Right-click files → "Open in Terminal"
+
+### AI Features
+- **Agent Workflow**: Use the AI panel for code assistance
+- **Chat Interface**: Type requests in the AI chat area
+
+## 🔧 Configuration
+
+### Environment Variables
+Create a `.env` file for local development:
+```env
+VITE_API_URL=http://localhost:8080
 ```
 
-3. **Open your browser and navigate to:** `http://localhost:3000`
+### Backend Integration
+The app is designed to work with a Node.js backend server. Backend features include:
+- File system operations
+- AI agent orchestration
+- WebSocket communication
 
-## Usage
-
-### Opening Files and Folders
-
-1. **Single Files**: Click "File" in the sidebar to open individual files
-2. **Entire Folders**: Click "Folder" to open complete project folders
-3. **Create New**: Click "New" to create new files
-4. **Drag & Drop**: (Coming soon) Drag files/folders directly into the editor
-
-### Using the AI Chat
-
-1. **Ask Questions**: Type code-related questions in the chat input
-2. **Get Assistance**: The AI can help with debugging, explanations, and coding tasks
-3. **Copy Responses**: Click the copy icon to copy AI responses
-4. **Context Aware**: The AI is designed to understand your coding context
-
-### Terminal Commands
-
-The terminal supports common commands:
-- `help` - Show available commands
-- `ls` / `dir` - List directory contents
-- `pwd` - Show current directory
-- `clear` - Clear terminal
-- `git status` - Show git status
-- `npm run dev` - Start development server
-- And many more...
-
-## Supported Languages
-
-The editor supports syntax highlighting for:
-- **Web**: HTML, CSS, JavaScript, TypeScript, JSX, TSX
-- **Styling**: SCSS, SASS, Less
-- **Backend**: Python, Java, C/C++, C#, PHP, Ruby, Go, Rust
-- **Mobile**: Swift, Kotlin, Dart
-- **Data**: JSON, XML, YAML, SQL
-- **Documentation**: Markdown
-- **Configuration**: Dockerfile, Shell scripts
-- **Frameworks**: Vue, Svelte, React
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 src/
 ├── components/          # React components
-│   ├── Editor.tsx      # Monaco editor wrapper
-│   ├── Sidebar.tsx     # File explorer and folder tree
-│   ├── TabBar.tsx      # Tab management system
-│   ├── AIChat.tsx      # AI chat interface
-│   └── Terminal.tsx    # Terminal component
+│   ├── Sidebar.tsx     # File explorer and navigation
+│   ├── Editor.tsx      # Code editor component
+│   ├── TerminalTabs.tsx # Terminal interface
+│   └── ...
+├── contexts/           # React contexts
 ├── utils/              # Utility functions
-│   ├── fileUtils.ts    # File and folder operations
-│   └── index.ts        # Common utilities
-├── types/              # TypeScript declarations
-│   └── global.d.ts     # Global type extensions
-├── App.tsx             # Main application with layout
-├── main.tsx            # Application entry point
-└── index.css           # Global styles and theme
+├── types/              # TypeScript type definitions
+└── App.tsx            # Main application component
 ```
 
-## Technology Stack
+## 🤝 Contributing
 
-- **React 18** - UI library with hooks
-- **TypeScript** - Type safety and better development experience
-- **Vite** - Lightning-fast build tool and dev server
-- **Monaco Editor** - VS Code's editor engine
-- **Tailwind CSS** - Utility-first CSS framework
-- **Lucide React** - Beautiful icon library
-- **React Resizable Panels** - Smooth resizable layout system
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
-## Architecture Highlights
+## 📄 License
 
-- **Modular Design**: Clean separation of concerns
-- **Type Safety**: Full TypeScript coverage
-- **State Management**: Efficient React state with hooks
-- **File System**: Hierarchical folder structure support
-- **Persistence**: Local storage for state preservation
-- **Responsive**: Adaptive layout for all screen sizes
+MIT License - see LICENSE file for details
 
-## Future Enhancements
+## 🙏 Acknowledgments
 
-### Phase 2: AI Integration
-- 🤖 Real AI API integration (OpenAI, Claude, etc.)
-- 💡 Code suggestions and autocompletion
-- 🔍 Intelligent code analysis and refactoring
-- 🗣️ Voice commands and dictation
-
-### Phase 3: Advanced Features
-- 🌐 Real-time collaboration
-- 🔌 Plugin system and extensions
-- 📊 Git integration with visual diff
-- 🎨 Multiple themes and customization
-- 🚀 Code execution and debugging
-- 📱 Mobile app version
-
-### Phase 4: Enterprise Features
-- 👥 Team workspaces
-- 🔐 Advanced authentication
-- ☁️ Cloud synchronization
-- 📈 Usage analytics
-- 🛡️ Security features
-
-## Contributing
-
-This project is designed to be the foundation for a modern AI-powered code editor. Contributions are welcome in:
-
-1. **Core Features**: Improving existing functionality
-2. **AI Integration**: Adding real AI capabilities
-3. **UI/UX**: Enhancing the user experience
-4. **Performance**: Optimizing for speed and efficiency
-5. **Testing**: Adding comprehensive tests
-6. **Documentation**: Improving docs and examples
-
-## License
-
-MIT License
+- Inspired by VS Code
+- Built with modern web technologies
+- Designed for developer productivity
 
 ---
 
-**Note**: This is the first phase of an AI-focused code editor. The AI chat currently uses simulated responses for demonstration. In future phases, it will integrate with real AI APIs to provide intelligent code assistance. 
+**Built with ❤️ by silvermerlin** 
