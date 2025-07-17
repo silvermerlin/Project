@@ -52,7 +52,10 @@ class ApiService {
 
   // File operations
   async listFiles(path: string = '/'): Promise<any[]> {
-    return this.request(`${API_ENDPOINTS.listFiles}?path=${encodeURIComponent(path)}`);
+    console.log('📂 API: Requesting file list for path:', path);
+    const result = await this.request(`${API_ENDPOINTS.listFiles}?path=${encodeURIComponent(path)}`);
+    console.log('📂 API: File list response:', result);
+    return result;
   }
 
   async getFileContent(path: string): Promise<string> {

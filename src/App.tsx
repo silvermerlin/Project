@@ -80,7 +80,10 @@ const AppContent: React.FC = () => {
   const loadFileSystem = async (path: string = '/') => {
     try {
       setIsLoading(true);
+      console.log('📁 Loading file system for path:', path);
       const files = await apiService.listFiles(path);
+      
+      console.log('📁 Files received from backend:', files);
       
       const fileItems: FileItem[] = files.map((file: BackendFileInfo) => ({
         id: file.path,
@@ -93,6 +96,7 @@ const AppContent: React.FC = () => {
         isExpanded: false
       }));
 
+      console.log('📁 Converted file items:', fileItems);
       setFileSystemItems(fileItems);
       setCurrentPath(path);
     } catch (error) {
