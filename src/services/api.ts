@@ -50,6 +50,11 @@ class ApiService {
     return this.request(API_ENDPOINTS.health);
   }
 
+  // Test endpoint for debugging
+  async testConnection(): Promise<{ message: string; timestamp: string; ollamaHost: string; cors: string }> {
+    return this.request('/api/test');
+  }
+
   // File operations
   async listFiles(path: string = '/'): Promise<any[]> {
     console.log('📂 API: Requesting file list for path:', path);

@@ -21,12 +21,28 @@ export class OllamaService {
         method: 'GET',
         // Keep shorter timeout for health check
         signal: AbortSignal.timeout(10000), // 10 second timeout for health check
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
       });
       
       if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error('Ollama health check HTTP error:', response.status, errorText);
         return { 
           healthy: false, 
-          error: `HTTP ${response.status}: ${await response.text().catch(() => 'Unknown error')}` 
+          error: `HTTP ${response.status}: ${errorText}` 
+        };
+      }
+      
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Ollama health check non-JSON response:', contentType, text.substring(0, 200));
+        return { 
+          healthy: false, 
+          error: `Expected JSON response, got ${contentType}` 
         };
       }
       

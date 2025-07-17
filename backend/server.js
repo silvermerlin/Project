@@ -32,16 +32,15 @@ const REMOTE_SERVERS = JSON.parse(process.env.REMOTE_SERVERS || '[]');
 
 // Middleware
 app.use(cors({
-  origin: [
-    'https://project-m7f3zwyow-deez-nuts-projects-54dd1620.vercel.app',
-    'https://project-production-a055.up.railway.app',
-    'http://localhost:5173',
-    'http://localhost:3000'
-  ],
+  origin: true, // Allow all origins for now
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
+
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Upload file endpoint - must be defined BEFORE JSON middleware
@@ -180,6 +179,16 @@ console.log(`👀 File watching enabled for workspace`);
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Test endpoint for debugging
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    message: 'Backend is working!',
+    timestamp: new Date().toISOString(),
+    ollamaHost: OLLAMA_HOST,
+    cors: 'enabled'
+  });
 });
 
 // API health check endpoint (for frontend)
@@ -571,15 +580,33 @@ app.get('/api/ollama/health', async (req, res) => {
 // Ollama proxy endpoints
 app.get('/api/ollama/api/tags', async (req, res) => {
   try {
+    console.log('🔍 Ollama proxy request to:', `${OLLAMA_HOST}/api/tags`);
     const response = await axios.get(`${OLLAMA_HOST}/api/tags`, {
-      timeout: 10000
+      timeout: 10000,
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'AI-Code-Editor/1.0'
+      }
     });
+    
+    console.log('✅ Ollama proxy response status:', response.status);
+    console.log('✅ Ollama proxy response data:', response.data);
+    
     res.json(response.data);
   } catch (error) {
     console.error('❌ Ollama tags request failed:', error.message);
+    
+    // Log more details about the error
+    if (error.response) {
+      console.error('❌ Response status:', error.response.status);
+      console.error('❌ Response headers:', error.response.headers);
+      console.error('❌ Response data:', error.response.data);
+    }
+    
     res.status(503).json({ 
       error: 'Failed to fetch Ollama models',
-      details: error.message
+      details: error.message,
+      endpoint: OLLAMA_HOST
     });
   }
 });
