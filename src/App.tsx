@@ -13,6 +13,7 @@ import BackendStatus from './components/BackendStatus';
 import { apiService } from './services/api';
 import { wsService } from './services/websocket';
 import { isRailwayBackend } from './config/api';
+import { FileSystemItem, getFileLanguage } from './utils/fileUtils';
 
 // Types for backend integration
 interface BackendFileInfo {
@@ -41,7 +42,7 @@ const AppContent: React.FC = () => {
   const { } = useTerminal();
   
   // State management
-  const [fileSystemItems, setFileSystemItems] = useState<FileItem[]>([]);
+  const [fileSystemItems, setFileSystemItems] = useState<FileSystemItem[]>([]);
   const [openFiles, setOpenFiles] = useState<FileItem[]>([]);
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -85,16 +86,31 @@ const AppContent: React.FC = () => {
       
       console.log('📁 Files received from backend:', files);
       
-      const fileItems: FileItem[] = files.map((file: BackendFileInfo) => ({
-        id: file.path,
-        name: file.name,
-        path: file.path,
-        type: file.type,
-        isModified: false,
-        isLoaded: false,
-        children: file.isDirectory ? [] : undefined,
-        isExpanded: false
-      }));
+      const fileItems: FileSystemItem[] = files.map((file: BackendFileInfo) => {
+        if (file.isDirectory) {
+          // Convert to FolderItem
+          return {
+            id: file.path,
+            name: file.name,
+            path: file.path,
+            type: 'folder' as const,
+            children: [],
+            isExpanded: false
+          };
+        } else {
+          // Convert to FileItem
+          return {
+            id: file.path,
+            name: file.name,
+            path: file.path,
+            type: 'file' as const,
+            content: '',
+            language: getFileLanguage(file.name),
+            isModified: false,
+            isLoaded: false
+          };
+        }
+      });
 
       console.log('📁 Converted file items:', fileItems);
       setFileSystemItems(fileItems);
@@ -208,16 +224,29 @@ const AppContent: React.FC = () => {
       if (!folder.isExpanded) {
         // Load folder contents from backend
         const files = await apiService.listFiles(folder.path);
-        const children: FileItem[] = files.map((file: BackendFileInfo) => ({
-          id: file.path,
-          name: file.name,
-          path: file.path,
-          type: file.type,
-          isModified: false,
-          isLoaded: false,
-          children: file.isDirectory ? [] : undefined,
-          isExpanded: false
-        }));
+        const children: FileSystemItem[] = files.map((file: BackendFileInfo) => {
+          if (file.isDirectory) {
+            return {
+              id: file.path,
+              name: file.name,
+              path: file.path,
+              type: 'folder' as const,
+              children: [],
+              isExpanded: false
+            };
+          } else {
+            return {
+              id: file.path,
+              name: file.name,
+              path: file.path,
+              type: 'file' as const,
+              content: '',
+              language: getFileLanguage(file.name),
+              isModified: false,
+              isLoaded: false
+            };
+          }
+        });
 
         setFileSystemItems(prev => prev.map(f => 
           f.id === folderId ? { ...f, children, isExpanded: true } : f
