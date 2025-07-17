@@ -1,128 +1,76 @@
 // API Configuration for AI Code Editor
-// Supports both local development and Railway production
+// Supports both local development and desktop app
 
-const isDevelopment = import.meta.env.DEV;
+const isElectron = window.electronAPI !== undefined;
+const isLocalDev = import.meta.env.DEV;
 
-// Backend URLs
-export const API_CONFIG = {
-  // Development (local backend)
-  development: {
-    baseURL: 'http://localhost:8080',
-    wsURL: 'ws://localhost:8080',
-  },
-  // Production (Railway backend)
-  production: {
-    baseURL: import.meta.env.VITE_API_URL || 'https://project-production-a055.up.railway.app',
-    wsURL: import.meta.env.VITE_WS_URL || 'wss://project-production-a055.up.railway.app',
-  }
-};
+// Determine API base URL
+let API_BASE_URL: string;
 
-// Current configuration based on environment
-export const currentConfig = isDevelopment ? API_CONFIG.development : API_CONFIG.production;
+if (isElectron) {
+  // In Electron app, always use local backend
+  API_BASE_URL = 'http://localhost:8080';
+} else if (isLocalDev) {
+  // In browser development, use local backend
+  API_BASE_URL = 'http://localhost:8080';
+} else {
+  // In production browser, use Railway backend
+  API_BASE_URL = 'https://project-production-a055.up.railway.app';
+}
+
+// WebSocket URL
+export const WS_URL = API_BASE_URL.replace('http', 'ws');
 
 // API endpoints
 export const API_ENDPOINTS = {
+  // Health check
+  health: `${API_BASE_URL}/api/health`,
+  
   // File operations
-  uploadFile: '/api/files/upload',
-  downloadFile: '/api/files/download',
-  deleteFile: '/api/files/delete',
-  renameFile: '/api/files/rename',
-  createFile: '/api/files/create',
-  createFolder: '/api/files/create-folder',
+  listFiles: `${API_BASE_URL}/api/files`,
+  getFileContent: (path: string) => `${API_BASE_URL}/api/files/${encodeURIComponent(path)}`,
+  saveFileContent: (path: string) => `${API_BASE_URL}/api/files/${encodeURIComponent(path)}`,
+  createFile: (path: string) => `${API_BASE_URL}/api/files/${encodeURIComponent(path)}`,
+  deleteFile: (path: string) => `${API_BASE_URL}/api/files/${encodeURIComponent(path)}`,
+  renameFile: (path: string) => `${API_BASE_URL}/api/files/${encodeURIComponent(path)}/rename`,
+  uploadFile: `${API_BASE_URL}/api/upload`,
   
-  // File system
-  listFiles: '/api/files/list',
-  getFileContent: '/api/files/content',
-  saveFileContent: '/api/files/save',
+  // Terminal operations
+  createTerminal: `${API_BASE_URL}/api/terminal`,
+  executeCommand: (id: string) => `${API_BASE_URL}/api/terminal/${id}/execute`,
   
-  // Terminal
-  terminal: '/api/terminal',
+  // AI operations
+  aiChat: `${API_BASE_URL}/api/ai/chat`,
+  aiComplete: `${API_BASE_URL}/api/ai/complete`,
   
-  // AI/LLM
-  aiChat: '/api/ai/chat',
-  aiComplete: '/api/ai/complete',
-  
-  // System
-  health: '/api/health',
-  systemInfo: '/api/system/info',
+  // Ollama proxy
+  ollamaProxy: `${API_BASE_URL}/api/ollama`,
   
   // Git operations
-  gitStatus: '/api/git/status',
-  gitCommit: '/api/git/commit',
-  gitPush: '/api/git/push',
-  gitPull: '/api/git/pull',
+  gitStatus: `${API_BASE_URL}/api/git/status`,
+  gitCommit: `${API_BASE_URL}/api/git/commit`,
+  gitPush: `${API_BASE_URL}/api/git/push`,
   
   // Package management
-  installPackage: '/api/packages/install',
-  listPackages: '/api/packages/list',
-  uninstallPackage: '/api/packages/uninstall',
-};
-
-// WebSocket events
-export const WS_EVENTS = {
-  // File system events
-  FILE_CREATED: 'file:created',
-  FILE_UPDATED: 'file:updated',
-  FILE_DELETED: 'file:deleted',
-  FILE_RENAMED: 'file:renamed',
+  listPackages: `${API_BASE_URL}/api/packages`,
+  installPackage: `${API_BASE_URL}/api/packages/install`,
+  uninstallPackage: `${API_BASE_URL}/api/packages/uninstall`,
   
-  // Terminal events
-  TERMINAL_OUTPUT: 'terminal:output',
-  TERMINAL_INPUT: 'terminal:input',
-  TERMINAL_RESIZE: 'terminal:resize',
-  
-  // AI events
-  AI_RESPONSE: 'ai:response',
-  AI_STREAM: 'ai:stream',
-  
-  // System events
-  SYSTEM_UPDATE: 'system:update',
-  ERROR: 'error',
-};
-
-// Helper functions
-export const getApiUrl = (endpoint: string): string => {
-  return `${currentConfig.baseURL}${endpoint}`;
-};
-
-export const getWsUrl = (): string => {
-  return currentConfig.wsURL;
-};
-
-// Request configuration
-export const requestConfig = {
-  timeout: 30000, // 30 seconds
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true, // Include cookies for authentication if needed
-};
-
-// WebSocket configuration
-export const wsConfig = {
-  reconnectInterval: 1000, // 1 second
-  maxReconnectAttempts: 5,
-  heartbeatInterval: 30000, // 30 seconds
+  // System info
+  systemInfo: `${API_BASE_URL}/api/system/info`,
 };
 
 // Environment detection
-export const isRailwayBackend = () => {
-  return !isDevelopment && currentConfig.baseURL.includes('railway.app');
-};
+export const isRailwayBackend = () => !isLocalDev && !isElectron;
+export const isLocalBackend = () => isLocalDev || isElectron;
+export const isDesktopApp = () => isElectron;
 
-export const isLocalBackend = () => {
-  return isDevelopment || currentConfig.baseURL.includes('localhost');
-};
-
-// Log current configuration (for debugging)
+// Log configuration
 console.log('🔧 API Configuration:', {
-  environment: isDevelopment ? 'development' : 'production',
-  baseURL: currentConfig.baseURL,
-  wsURL: currentConfig.wsURL,
-  isRailway: isRailwayBackend(),
-  isLocal: isLocalBackend(),
-  envVars: {
-    VITE_API_URL: import.meta.env.VITE_API_URL,
-    VITE_WS_URL: import.meta.env.VITE_WS_URL,
-  }
+  isElectron,
+  isLocalDev,
+  API_BASE_URL,
+  isRailwayBackend: isRailwayBackend(),
+  isLocalBackend: isLocalBackend(),
+  isDesktopApp: isDesktopApp()
 }); 
