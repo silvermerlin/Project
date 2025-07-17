@@ -12,8 +12,8 @@ export const API_CONFIG = {
   },
   // Production (Railway backend)
   production: {
-    baseURL: import.meta.env.VITE_API_URL || 'https://your-railway-app.railway.app',
-    wsURL: import.meta.env.VITE_WS_URL || 'wss://your-railway-app.railway.app',
+    baseURL: import.meta.env.VITE_API_URL || 'https://project-production-a055.up.railway.app',
+    wsURL: import.meta.env.VITE_WS_URL || 'wss://project-production-a055.up.railway.app',
   }
 };
 
@@ -115,12 +115,14 @@ export const isLocalBackend = () => {
 };
 
 // Log current configuration (for debugging)
-if (isDevelopment) {
-  console.log('🔧 API Configuration:', {
-    environment: isDevelopment ? 'development' : 'production',
-    baseURL: currentConfig.baseURL,
-    wsURL: currentConfig.wsURL,
-    isRailway: isRailwayBackend(),
-    isLocal: isLocalBackend(),
-  });
-} 
+console.log('🔧 API Configuration:', {
+  environment: isDevelopment ? 'development' : 'production',
+  baseURL: currentConfig.baseURL,
+  wsURL: currentConfig.wsURL,
+  isRailway: isRailwayBackend(),
+  isLocal: isLocalBackend(),
+  envVars: {
+    VITE_API_URL: import.meta.env.VITE_API_URL,
+    VITE_WS_URL: import.meta.env.VITE_WS_URL,
+  }
+}); 
