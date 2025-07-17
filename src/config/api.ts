@@ -60,6 +60,42 @@ export const API_ENDPOINTS = {
   systemInfo: `${API_BASE_URL}/api/system/info`,
 };
 
+// Helper functions for API URLs
+export const getApiUrl = (endpoint: string) => {
+  // If endpoint already starts with http, return as is
+  if (endpoint.startsWith('http')) {
+    return endpoint;
+  }
+  // Otherwise, add to base URL
+  return `${API_BASE_URL}${endpoint}`;
+};
+export const getWsUrl = () => WS_URL;
+
+// Request configuration
+export const requestConfig = {
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  credentials: 'include' as const,
+};
+
+// WebSocket configuration
+export const wsConfig = {
+  reconnectInterval: 1000,
+  maxReconnectAttempts: 5,
+};
+
+// WebSocket events
+export const WS_EVENTS = {
+  FILE_CHANGED: 'file_changed',
+  FILE_CREATED: 'file_created',
+  FILE_DELETED: 'file_deleted',
+  TERMINAL_OUTPUT: 'terminal_output',
+  TERMINAL_EXIT: 'terminal_exit',
+  AI_RESPONSE: 'ai_response',
+  SYSTEM_UPDATE: 'system_update',
+};
+
 // Environment detection
 export const isRailwayBackend = () => !isLocalDev && !isElectron;
 export const isLocalBackend = () => isLocalDev || isElectron;

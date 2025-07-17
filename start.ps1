@@ -1,12 +1,21 @@
 ﻿# Start AI Code Editor
 Write-Host "Starting AI Code Editor..." -ForegroundColor Cyan
 
+# Install backend dependencies if needed
+Write-Host "Checking backend dependencies..." -ForegroundColor Yellow
+if (-not (Test-Path "backend/node_modules")) {
+    Write-Host "Installing backend dependencies..." -ForegroundColor Yellow
+    Set-Location backend
+    npm install
+    Set-Location ..
+}
+
 # Start backend
 Write-Host "Starting backend..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; node server.js"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; npm start"
 
 # Wait a moment for backend to start
-Start-Sleep -Seconds 3
+Start-Sleep -Seconds 5
 
 # Start frontend
 Write-Host "Starting frontend..." -ForegroundColor Yellow
