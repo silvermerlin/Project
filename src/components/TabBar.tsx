@@ -119,6 +119,12 @@ const TabBar: React.FC<TabBarProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (file.isModified) {
+                    const shouldClose = confirm(`Save changes to "${file.name}" before closing?`);
+                    if (shouldClose) {
+                      onSaveFile(file.id);
+                    }
+                  }
                   onTabClose(file.id);
                 }}
                 className="p-1 rounded hover:bg-editor-border transition-colors"

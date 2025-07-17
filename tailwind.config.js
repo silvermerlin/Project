@@ -16,6 +16,7 @@ export default {
         'editor-text-secondary': '#969696',
         'editor-accent': '#007acc',
         'editor-accent-hover': '#1177bb',
+        'editor-status': '#252526',
       },
       fontFamily: {
         'mono': ['JetBrains Mono', 'Fira Code', 'monospace'],

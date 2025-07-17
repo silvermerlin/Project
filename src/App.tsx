@@ -10,10 +10,13 @@ import EnhancedTerminal from './components/EnhancedTerminal';
 import SettingsModal from './components/SettingsModal';
 import MenuBar from './components/MenuBar';
 import BackendStatus from './components/BackendStatus';
+import StatusBar from './components/StatusBar';
+import FileSearch from './components/FileSearch';
 import { apiService } from './services/api';
 import { wsService } from './services/websocket';
 import { isRailwayBackend } from './config/api';
 import { FileSystemItem, FileItem, FolderItem, getFileLanguage } from './utils/fileUtils';
+import { shortcutManager, createDefaultShortcuts } from './utils/keyboardShortcuts';
 
 // Types for backend integration
 interface BackendFileInfo {
@@ -49,6 +52,7 @@ const AppContent: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [currentPath, setCurrentPath] = useState('/');
   const [backendConnected, setBackendConnected] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // Get active file
   const activeFile = openFiles.find(f => f.id === activeFileId) || null;
@@ -64,6 +68,31 @@ const AppContent: React.FC = () => {
         // Connect WebSocket
         await wsService.connect();
         
+        // Set up WebSocket event handlers
+        wsService.setEventHandlers({
+          onFileCreated: (data) => {
+            console.log('📄 File created via WebSocket:', data);
+            // Reload file system to show new file
+            loadFileSystem(currentPath);
+          },
+          onFileUpdated: (data) => {
+            console.log('📝 File updated via WebSocket:', data);
+            // Reload file system to show changes
+            loadFileSystem(currentPath);
+          },
+          onFileDeleted: (data) => {
+            console.log('🗑️ File deleted via WebSocket:', data);
+            // Reload file system to reflect deletion
+            loadFileSystem(currentPath);
+          },
+          onConnect: () => {
+            console.log('✅ WebSocket connected');
+          },
+          onDisconnect: () => {
+            console.log('❌ WebSocket disconnected');
+          }
+        });
+        
         // Load initial file system
         await loadFileSystem();
         
@@ -75,7 +104,7 @@ const AppContent: React.FC = () => {
     };
 
     initializeBackend();
-  }, []);
+  }, [currentPath]);
 
   // Load file system from backend
   const loadFileSystem = async (path: string = '/') => {
@@ -226,6 +255,63 @@ const AppContent: React.FC = () => {
     }
   }, [fileSystemItems, openFiles]);
 
+  // Handle file content changes
+  const handleFileChange = useCallback(async (fileId: string, content: string) => {
+    console.log('📝 File content changed:', fileId, 'length:', content.length);
+    
+    setOpenFiles(prev => prev.map(file => 
+      file.id === fileId 
+        ? { ...file, content, isModified: true }
+        : file
+    ));
+  }, []);
+
+  // Handle file save
+  const handleFileSave = useCallback(async (fileId: string) => {
+    const file = openFiles.find(f => f.id === fileId);
+    if (!file) {
+      console.error('❌ File not found for saving:', fileId);
+      return;
+    }
+
+    try {
+      console.log('💾 Saving file:', file.path);
+      await apiService.saveFileContent(file.path, file.content || '');
+      
+      setOpenFiles(prev => prev.map(f => 
+        f.id === fileId 
+          ? { ...f, isModified: false }
+          : f
+      ));
+      
+      console.log('✅ File saved successfully');
+    } catch (error) {
+      console.error('❌ Error saving file:', error);
+      alert('Failed to save file');
+    }
+  }, [openFiles]);
+
+  // Auto-save functionality
+  const handleAutoSave = useCallback(async (fileId: string) => {
+    const file = openFiles.find(f => f.id === fileId);
+    if (!file || !file.isModified) return;
+
+    try {
+      console.log('🔄 Auto-saving file:', file.path);
+      await apiService.saveFileContent(file.path, file.content || '');
+      
+      setOpenFiles(prev => prev.map(f => 
+        f.id === fileId 
+          ? { ...f, isModified: false }
+          : f
+      ));
+      
+      console.log('✅ Auto-save completed');
+    } catch (error) {
+      console.error('❌ Auto-save failed:', error);
+    }
+  }, [openFiles]);
+
   const handleTabClick = useCallback((fileId: string) => {
     setActiveFileId(fileId);
   }, []);
@@ -303,8 +389,36 @@ const AppContent: React.FC = () => {
       setOpenFiles(prev => prev.map(f => 
         f.id === activeFileId ? { ...f, content, isModified: true } : f
       ));
+      
+      // Auto-save after a delay
+      const timeoutId = setTimeout(() => {
+        handleAutoSave(activeFileId);
+      }, 2000); // Auto-save after 2 seconds of inactivity
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [activeFileId]);
+
+  // Auto-save functionality
+  const handleAutoSave = useCallback(async (fileId: string) => {
+    const file = openFiles.find(f => f.id === fileId);
+    if (!file || !file.isModified) return;
+
+    try {
+      console.log('🔄 Auto-saving file:', file.path);
+      await apiService.saveFileContent(file.path, file.content || '');
+      
+      setOpenFiles(prev => prev.map(f => 
+        f.id === fileId 
+          ? { ...f, isModified: false }
+          : f
+      ));
+      
+      console.log('✅ Auto-save completed');
+    } catch (error) {
+      console.error('❌ Auto-save failed:', error);
+    }
+  }, [openFiles]);
 
   const handleSaveFile = useCallback(async (fileId?: string) => {
     const targetFileId = fileId || activeFileId;
@@ -370,6 +484,29 @@ const AppContent: React.FC = () => {
   const handleOpenInTerminal = useCallback((path: string) => {
     // This will be handled by the terminal component
     console.log('Opening terminal at path:', path);
+  }, []);
+
+  // Set up keyboard shortcuts
+  useEffect(() => {
+    const shortcuts = createDefaultShortcuts(
+      () => handleSaveFile(),
+      () => handleNewFile(),
+      () => (document.querySelector('input[type="file"]:not([webkitdirectory])') as HTMLInputElement)?.click(),
+      () => setIsSearchOpen(true),
+      () => console.log('Run code'),
+      () => console.log('Debug code'),
+      () => setIsSettingsOpen(true)
+    );
+
+    shortcuts.forEach(shortcut => {
+      shortcutManager.addShortcut(shortcut);
+    });
+
+    return () => {
+      shortcuts.forEach(shortcut => {
+        shortcutManager.removeShortcut(shortcut);
+      });
+    };
   }, []);
 
   return (
@@ -472,6 +609,21 @@ const AppContent: React.FC = () => {
           </Panel>
         </PanelGroup>
       </div>
+
+      {/* Status Bar */}
+      <StatusBar
+        activeFile={activeFile}
+        totalFiles={openFiles.length}
+        modifiedFiles={openFiles.filter(f => f.isModified).length}
+      />
+
+      {/* File Search Modal */}
+      <FileSearch
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        fileSystemItems={fileSystemItems}
+        onFileSelect={handleFileSelect}
+      />
 
       {/* Settings Modal */}
       <SettingsModal

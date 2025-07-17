@@ -112,10 +112,60 @@ const clients = new Set();
 // Ensure workspace directory exists
 await fs.mkdir(WORKSPACE_DIR, { recursive: true });
 
+// Start file watching for the entire workspace
+const workspaceWatcher = chokidar.watch(WORKSPACE_DIR, {
+  ignored: /node_modules|\.git|\.DS_Store|Thumbs\.db/,
+  persistent: true,
+  ignoreInitial: true
+});
+
+workspaceWatcher.on('change', (filePath) => {
+  const relativePath = path.relative(WORKSPACE_DIR, filePath);
+  console.log('📝 File changed:', relativePath);
+  
+  broadcastToClients({
+    type: 'file:updated',
+    data: {
+      path: relativePath,
+      action: 'modified',
+      timestamp: Date.now()
+    }
+  });
+});
+
+workspaceWatcher.on('add', (filePath) => {
+  const relativePath = path.relative(WORKSPACE_DIR, filePath);
+  console.log('📄 File created:', relativePath);
+  
+  broadcastToClients({
+    type: 'file:created',
+    data: {
+      path: relativePath,
+      action: 'created',
+      timestamp: Date.now()
+    }
+  });
+});
+
+workspaceWatcher.on('unlink', (filePath) => {
+  const relativePath = path.relative(WORKSPACE_DIR, filePath);
+  console.log('🗑️ File deleted:', relativePath);
+  
+  broadcastToClients({
+    type: 'file:deleted',
+    data: {
+      path: relativePath,
+      action: 'deleted',
+      timestamp: Date.now()
+    }
+  });
+});
+
 console.log(`🚀 AI Code Editor Backend Server`);
 console.log(`📁 Workspace: ${WORKSPACE_DIR}`);
 console.log(`🤖 Ollama: ${OLLAMA_HOST}`);
 console.log(`🌐 Port: ${PORT}`);
+console.log(`👀 File watching enabled for workspace`);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -296,6 +346,39 @@ app.post('/api/files/rename', async (req, res) => {
   }
 });
 
+// Download file endpoint (frontend expects this endpoint)
+app.get('/api/files/download', async (req, res) => {
+  try {
+    const { path: filePath } = req.query;
+    if (!filePath) {
+      return res.status(400).json({ error: 'File path is required' });
+    }
+    
+    const fullPath = path.join(WORKSPACE_DIR, filePath);
+    const stats = await fs.stat(fullPath);
+    
+    if (!stats.isFile()) {
+      return res.status(400).json({ error: 'Path is not a file' });
+    }
+    
+    // Set appropriate headers for file download
+    const fileName = path.basename(fullPath);
+    const contentType = mime.lookup(fileName) || 'application/octet-stream';
+    
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', stats.size);
+    
+    // Stream the file
+    const fileStream = await import('fs').then(fs => fs.createReadStream(fullPath));
+    fileStream.pipe(res);
+    
+  } catch (error) {
+    console.error('Error downloading file:', error);
+    res.status(500).json({ error: 'Failed to download file' });
+  }
+});
+
 // Terminal endpoint (frontend expects this endpoint)
 app.post('/api/terminal', async (req, res) => {
   try {
@@ -453,6 +536,402 @@ app.get('/api/models', async (req, res) => {
   }
 });
 
+// AI Chat endpoint (frontend expects this endpoint)
+app.post('/api/ai/chat', async (req, res) => {
+  try {
+    const { message, context = {} } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    // Prepare context for AI
+    const systemPrompt = `You are an AI coding assistant integrated into a VS Code-like editor. 
+    
+Context:
+- Current workspace: ${WORKSPACE_DIR}
+- Available files: ${JSON.stringify(context.files || [])}
+- Current file: ${context.currentFile || 'none'}
+- Terminal history: ${JSON.stringify(context.terminalHistory || [])}
+
+You can help with:
+1. Code analysis and suggestions
+2. File operations (create, modify, delete)
+3. Terminal commands
+4. Project structure recommendations
+5. Debugging assistance
+
+Respond in a helpful, concise manner focused on coding tasks.`;
+
+    const response = await axios.post(`http://${OLLAMA_HOST}/api/generate`, {
+      model: 'llama3.1',
+      prompt: message,
+      system: systemPrompt,
+      stream: false
+    });
+    
+    res.json({ 
+      response: response.data.response,
+      model: 'llama3.1'
+    });
+    
+  } catch (error) {
+    console.error('Error with AI chat:', error);
+    res.status(500).json({ 
+      error: 'Failed to get AI response',
+      details: error.message
+    });
+  }
+});
+
+// AI Code completion endpoint (frontend expects this endpoint)
+app.post('/api/ai/complete', async (req, res) => {
+  try {
+    const { code, language } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({ error: 'Code is required' });
+    }
+    
+    const prompt = `Complete the following ${language || 'code'}:\n\n${code}\n\nCompletion:`;
+    
+    const response = await axios.post(`http://${OLLAMA_HOST}/api/generate`, {
+      model: 'llama3.1',
+      prompt: prompt,
+      stream: false,
+      options: {
+        temperature: 0.3,
+        top_p: 0.9
+      }
+    });
+    
+    res.json({ 
+      completion: response.data.response
+    });
+    
+  } catch (error) {
+    console.error('Error with AI completion:', error);
+    res.status(500).json({ 
+      error: 'Failed to get AI completion',
+      details: error.message
+    });
+  }
+});
+
+// Git status endpoint (frontend expects this endpoint)
+app.get('/api/git/status', async (req, res) => {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    const result = await execAsync('git status --porcelain', { 
+      cwd: WORKSPACE_DIR,
+      timeout: 10000 
+    });
+    
+    const files = result.stdout.split('\n')
+      .filter(line => line.trim())
+      .map(line => {
+        const status = line.substring(0, 2);
+        const path = line.substring(3);
+        return {
+          path,
+          status: status.trim(),
+          staged: status[0] !== ' ',
+          modified: status[1] !== ' '
+        };
+      });
+    
+    res.json({ 
+      status: 'success',
+      files
+    });
+    
+  } catch (error) {
+    console.error('Error getting git status:', error);
+    res.status(500).json({ 
+      error: 'Failed to get git status',
+      details: error.message
+    });
+  }
+});
+
+// Git commit endpoint (frontend expects this endpoint)
+app.post('/api/git/commit', async (req, res) => {
+  try {
+    const { message, files = [] } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Commit message is required' });
+    }
+    
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    // Add files if specified
+    if (files.length > 0) {
+      await execAsync(`git add ${files.join(' ')}`, { cwd: WORKSPACE_DIR });
+    } else {
+      await execAsync('git add .', { cwd: WORKSPACE_DIR });
+    }
+    
+    // Commit
+    const result = await execAsync(`git commit -m "${message}"`, { 
+      cwd: WORKSPACE_DIR,
+      timeout: 10000 
+    });
+    
+    // Extract commit hash
+    const commitMatch = result.stdout.match(/\[([a-f0-9]+)\]/);
+    const commitId = commitMatch ? commitMatch[1] : null;
+    
+    res.json({ 
+      success: true,
+      commitId,
+      message: result.stdout
+    });
+    
+  } catch (error) {
+    console.error('Error creating git commit:', error);
+    res.status(500).json({ 
+      error: 'Failed to create git commit',
+      details: error.message
+    });
+  }
+});
+
+// Git push endpoint (frontend expects this endpoint)
+app.post('/api/git/push', async (req, res) => {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    const result = await execAsync('git push', { 
+      cwd: WORKSPACE_DIR,
+      timeout: 30000 
+    });
+    
+    res.json({ 
+      success: true,
+      message: result.stdout
+    });
+    
+  } catch (error) {
+    console.error('Error pushing to git:', error);
+    res.status(500).json({ 
+      error: 'Failed to push to git',
+      details: error.message
+    });
+  }
+});
+
+// Git pull endpoint (frontend expects this endpoint)
+app.post('/api/git/pull', async (req, res) => {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    const result = await execAsync('git pull', { 
+      cwd: WORKSPACE_DIR,
+      timeout: 30000 
+    });
+    
+    res.json({ 
+      success: true,
+      message: result.stdout
+    });
+    
+  } catch (error) {
+    console.error('Error pulling from git:', error);
+    res.status(500).json({ 
+      error: 'Failed to pull from git',
+      details: error.message
+    });
+  }
+});
+
+// Package installation endpoint (frontend expects this endpoint)
+app.post('/api/packages/install', async (req, res) => {
+  try {
+    const { packageName, packageManager = 'npm' } = req.body;
+    
+    if (!packageName) {
+      return res.status(400).json({ error: 'Package name is required' });
+    }
+    
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    let command;
+    switch (packageManager) {
+      case 'yarn':
+        command = `yarn add ${packageName}`;
+        break;
+      case 'pnpm':
+        command = `pnpm add ${packageName}`;
+        break;
+      default:
+        command = `npm install ${packageName}`;
+    }
+    
+    const result = await execAsync(command, { 
+      cwd: WORKSPACE_DIR,
+      timeout: 60000 
+    });
+    
+    res.json({ 
+      success: true,
+      output: result.stdout + result.stderr
+    });
+    
+  } catch (error) {
+    console.error('Error installing package:', error);
+    res.status(500).json({ 
+      error: 'Failed to install package',
+      details: error.message
+    });
+  }
+});
+
+// List packages endpoint (frontend expects this endpoint)
+app.get('/api/packages/list', async (req, res) => {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    // Try to read package.json
+    try {
+      const packageJson = await fs.readFile(path.join(WORKSPACE_DIR, 'package.json'), 'utf-8');
+      const packageData = JSON.parse(packageJson);
+      
+      res.json({
+        dependencies: Object.entries(packageData.dependencies || {}).map(([name, version]) => ({
+          name,
+          version,
+          type: 'dependency'
+        })),
+        devDependencies: Object.entries(packageData.devDependencies || {}).map(([name, version]) => ({
+          name,
+          version,
+          type: 'devDependency'
+        }))
+      });
+    } catch (error) {
+      // No package.json found
+      res.json({
+        dependencies: [],
+        devDependencies: []
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error listing packages:', error);
+    res.status(500).json({ 
+      error: 'Failed to list packages',
+      details: error.message
+    });
+  }
+});
+
+// Uninstall package endpoint (frontend expects this endpoint)
+app.delete('/api/packages/uninstall', async (req, res) => {
+  try {
+    const { packageName, packageManager = 'npm' } = req.body;
+    
+    if (!packageName) {
+      return res.status(400).json({ error: 'Package name is required' });
+    }
+    
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    let command;
+    switch (packageManager) {
+      case 'yarn':
+        command = `yarn remove ${packageName}`;
+        break;
+      case 'pnpm':
+        command = `pnpm remove ${packageName}`;
+        break;
+      default:
+        command = `npm uninstall ${packageName}`;
+    }
+    
+    const result = await execAsync(command, { 
+      cwd: WORKSPACE_DIR,
+      timeout: 30000 
+    });
+    
+    res.json({ 
+      success: true,
+      output: result.stdout + result.stderr
+    });
+    
+  } catch (error) {
+    console.error('Error uninstalling package:', error);
+    res.status(500).json({ 
+      error: 'Failed to uninstall package',
+      details: error.message
+    });
+  }
+});
+
+// System info endpoint (frontend expects this endpoint)
+app.get('/api/system/info', async (req, res) => {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    // Get platform info
+    const platform = process.platform;
+    const nodeVersion = process.version;
+    
+    // Get memory info
+    const memory = {
+      total: os.totalmem(),
+      free: os.freemem(),
+      used: os.totalmem() - os.freemem(),
+      percentage: ((os.totalmem() - os.freemem()) / os.totalmem() * 100).toFixed(2)
+    };
+    
+    // Get disk info
+    let disk;
+    try {
+      if (platform === 'win32') {
+        const result = await execAsync('wmic logicaldisk get size,freespace,caption', { timeout: 5000 });
+        disk = { info: result.stdout };
+      } else {
+        const result = await execAsync('df -h', { timeout: 5000 });
+        disk = { info: result.stdout };
+      }
+    } catch (error) {
+      disk = { error: error.message };
+    }
+    
+    res.json({
+      platform,
+      nodeVersion,
+      memory,
+      disk
+    });
+    
+  } catch (error) {
+    console.error('Error getting system info:', error);
+    res.status(500).json({ 
+      error: 'Failed to get system info',
+      details: error.message
+    });
+  }
+});
+
 // ============================================================================
 // 🌐 WEBSOCKET CONNECTIONS
 // ============================================================================
@@ -532,16 +1011,77 @@ function handleFileWatch(data) {
   
   if (!fileWatchers.has(watchPath)) {
     const watcher = chokidar.watch(fullPath, {
-      ignored: /node_modules|\.git/,
-      persistent: true
+      ignored: /node_modules|\.git|\.DS_Store|Thumbs\.db/,
+      persistent: true,
+      ignoreInitial: true
     });
     
     watcher.on('change', (filePath) => {
+      const relativePath = path.relative(WORKSPACE_DIR, filePath);
+      console.log('📝 File changed:', relativePath);
+      
       broadcastToClients({
-        type: 'file_changed',
+        type: 'file:updated',
         data: {
-          path: path.relative(WORKSPACE_DIR, filePath),
-          action: 'modified'
+          path: relativePath,
+          action: 'modified',
+          timestamp: Date.now()
+        }
+      });
+    });
+    
+    watcher.on('add', (filePath) => {
+      const relativePath = path.relative(WORKSPACE_DIR, filePath);
+      console.log('📄 File created:', relativePath);
+      
+      broadcastToClients({
+        type: 'file:created',
+        data: {
+          path: relativePath,
+          action: 'created',
+          timestamp: Date.now()
+        }
+      });
+    });
+    
+    watcher.on('unlink', (filePath) => {
+      const relativePath = path.relative(WORKSPACE_DIR, filePath);
+      console.log('🗑️ File deleted:', relativePath);
+      
+      broadcastToClients({
+        type: 'file:deleted',
+        data: {
+          path: relativePath,
+          action: 'deleted',
+          timestamp: Date.now()
+        }
+      });
+    });
+    
+    watcher.on('addDir', (dirPath) => {
+      const relativePath = path.relative(WORKSPACE_DIR, dirPath);
+      console.log('📁 Directory created:', relativePath);
+      
+      broadcastToClients({
+        type: 'file:created',
+        data: {
+          path: relativePath,
+          action: 'created',
+          timestamp: Date.now()
+        }
+      });
+    });
+    
+    watcher.on('unlinkDir', (dirPath) => {
+      const relativePath = path.relative(WORKSPACE_DIR, dirPath);
+      console.log('🗑️ Directory deleted:', relativePath);
+      
+      broadcastToClients({
+        type: 'file:deleted',
+        data: {
+          path: relativePath,
+          action: 'deleted',
+          timestamp: Date.now()
         }
       });
     });
