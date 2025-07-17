@@ -13,7 +13,7 @@ import BackendStatus from './components/BackendStatus';
 import { apiService } from './services/api';
 import { wsService } from './services/websocket';
 import { isRailwayBackend } from './config/api';
-import { FileSystemItem, getFileLanguage } from './utils/fileUtils';
+import { FileSystemItem, FileItem, FolderItem, getFileLanguage } from './utils/fileUtils';
 
 // Types for backend integration
 interface BackendFileInfo {
@@ -217,13 +217,22 @@ const AppContent: React.FC = () => {
   }, [activeFileId, openFiles]);
 
   const handleToggleFolder = useCallback(async (folderId: string) => {
+    console.log('🔄 Toggling folder:', folderId);
     const folder = fileSystemItems.find(f => f.id === folderId);
-    if (!folder || folder.type !== 'directory') return;
+    console.log('📁 Found folder:', folder);
+    if (!folder || folder.type !== 'folder') {
+      console.log('❌ Folder not found or wrong type:', folder?.type);
+      return;
+    }
 
     try {
-      if (!folder.isExpanded) {
+      const folderItem = folder as FolderItem;
+      console.log('📁 Folder item:', folderItem);
+      if (!folderItem.isExpanded) {
         // Load folder contents from backend
+        console.log('📂 Loading contents for folder path:', folder.path);
         const files = await apiService.listFiles(folder.path);
+        console.log('📂 Files in folder:', files);
         const children: FileSystemItem[] = files.map((file: BackendFileInfo) => {
           if (file.isDirectory) {
             return {
