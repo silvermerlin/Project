@@ -11,7 +11,8 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "electron": "electron .",
-    "electron-dev": "concurrently \"npm run backend\" \"wait-on http://localhost:8080 && npm run dev\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
+    "electron-dev": "npm run start-all",
+    "start-all": "powershell -ExecutionPolicy Bypass -File start.ps1",
     "backend": "cd backend && npm start",
     "electron-pack": "npm run build && electron-builder",
     "electron-dist": "npm run build && electron-builder --publish=never"
