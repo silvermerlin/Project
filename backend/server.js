@@ -32,8 +32,57 @@ const REMOTE_SERVERS = JSON.parse(process.env.REMOTE_SERVERS || '[]');
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Upload file endpoint - must be defined BEFORE JSON middleware
+app.post('/api/files/upload', async (req, res) => {
+  try {
+    // Handle multipart form data
+    const multer = (await import('multer')).default;
+    const upload = multer({ dest: '/tmp/' });
+    
+    upload.single('file')(req, res, async (err) => {
+      if (err) {
+        console.error('Upload error:', err);
+        return res.status(400).json({ error: 'Upload failed' });
+      }
+      
+      try {
+        const file = req.file;
+        const targetPath = req.body.path || '/';
+        
+        if (!file) {
+          return res.status(400).json({ error: 'No file provided' });
+        }
+        
+        console.log('Uploading file:', {
+          originalName: file.originalname,
+          targetPath: targetPath,
+          fileSize: file.size
+        });
+        
+        const filePath = path.join(WORKSPACE_DIR, targetPath, file.originalname);
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        
+        // Move uploaded file to destination
+        await fs.copyFile(file.path, filePath);
+        await fs.unlink(file.path); // Clean up temp file
+        
+        console.log('File uploaded successfully:', path.relative(WORKSPACE_DIR, filePath));
+        res.json({ success: true, filePath: path.relative(WORKSPACE_DIR, filePath) });
+      } catch (error) {
+        console.error('Error processing upload:', error);
+        res.status(500).json({ error: 'Failed to process upload' });
+      }
+    });
+  } catch (error) {
+    console.error('Error setting up upload:', error);
+    res.status(500).json({ error: 'Upload setup failed' });
+  }
+});
+
+// JSON middleware for other routes
+app.use(express.json({ limit: '50mb' }));
 
 // In-memory storage for active terminals and file watchers
 const terminals = new Map();
@@ -143,45 +192,7 @@ app.post('/api/files/save', async (req, res) => {
   }
 });
 
-// Upload file (frontend expects this endpoint)
-app.post('/api/files/upload', async (req, res) => {
-  try {
-    // Handle multipart form data
-    const multer = (await import('multer')).default;
-    const upload = multer({ dest: '/tmp/' });
-    
-    upload.single('file')(req, res, async (err) => {
-      if (err) {
-        console.error('Upload error:', err);
-        return res.status(400).json({ error: 'Upload failed' });
-      }
-      
-      try {
-        const file = req.file;
-        const { path: targetPath = '/' } = req.body;
-        
-        if (!file) {
-          return res.status(400).json({ error: 'No file provided' });
-        }
-        
-        const filePath = path.join(WORKSPACE_DIR, targetPath, file.originalname);
-        await fs.mkdir(path.dirname(filePath), { recursive: true });
-        
-        // Move uploaded file to destination
-        await fs.copyFile(file.path, filePath);
-        await fs.unlink(file.path); // Clean up temp file
-        
-        res.json({ success: true, filePath: path.relative(WORKSPACE_DIR, filePath) });
-      } catch (error) {
-        console.error('Error processing upload:', error);
-        res.status(500).json({ error: 'Failed to process upload' });
-      }
-    });
-  } catch (error) {
-    console.error('Error setting up upload:', error);
-    res.status(500).json({ error: 'Upload setup failed' });
-  }
-});
+
 
 // Create file (frontend expects this endpoint)
 app.post('/api/files/create', async (req, res) => {
