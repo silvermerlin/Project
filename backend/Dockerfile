@@ -1,3 +1,4 @@
+# Railway Deployment Dockerfile for AI Code Editor Backend
 FROM node:18-alpine
 
 # Install additional tools for terminal and file operations
