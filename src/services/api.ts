@@ -100,11 +100,24 @@ class ApiService {
     formData.append('file', file);
     formData.append('path', path);
 
-    return this.request(API_ENDPOINTS.uploadFile, {
+    // For FormData, we need to completely override headers to avoid Content-Type conflicts
+    const url = getApiUrl(API_ENDPOINTS.uploadFile);
+    const response = await fetch(url, {
       method: 'POST',
       body: formData,
-      headers: {}, // Let browser set content-type for FormData
+      // Don't set Content-Type - let browser set it automatically for FormData
     });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return await response.json();
+    } else {
+      return await response.text() as any;
+    }
   }
 
   // File download

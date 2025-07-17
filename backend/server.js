@@ -37,29 +37,48 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Upload file endpoint - must be defined BEFORE JSON middleware
 app.post('/api/files/upload', async (req, res) => {
   try {
+    console.log('Upload request received:', {
+      method: req.method,
+      url: req.url,
+      headers: req.headers['content-type'],
+      bodyKeys: Object.keys(req.body || {})
+    });
+    
     // Handle multipart form data
     const multer = (await import('multer')).default;
-    const upload = multer({ dest: '/tmp/' });
+    const upload = multer({ 
+      dest: '/tmp/',
+      limits: {
+        fileSize: 50 * 1024 * 1024, // 50MB limit
+        files: 1
+      }
+    });
     
     upload.single('file')(req, res, async (err) => {
       if (err) {
-        console.error('Upload error:', err);
-        return res.status(400).json({ error: 'Upload failed' });
+        console.error('Multer upload error:', err);
+        return res.status(400).json({ error: `Upload failed: ${err.message}` });
       }
       
       try {
         const file = req.file;
         const targetPath = req.body.path || '/';
         
-        if (!file) {
-          return res.status(400).json({ error: 'No file provided' });
-        }
-        
-        console.log('Uploading file:', {
-          originalName: file.originalname,
+        console.log('Upload processing:', {
+          hasFile: !!file,
+          fileInfo: file ? {
+            originalName: file.originalname,
+            size: file.size,
+            mimetype: file.mimetype,
+            path: file.path
+          } : null,
           targetPath: targetPath,
-          fileSize: file.size
+          bodyKeys: Object.keys(req.body || {})
         });
+        
+        if (!file) {
+          return res.status(400).json({ error: 'No file provided in request' });
+        }
         
         const filePath = path.join(WORKSPACE_DIR, targetPath, file.originalname);
         await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -72,12 +91,12 @@ app.post('/api/files/upload', async (req, res) => {
         res.json({ success: true, filePath: path.relative(WORKSPACE_DIR, filePath) });
       } catch (error) {
         console.error('Error processing upload:', error);
-        res.status(500).json({ error: 'Failed to process upload' });
+        res.status(500).json({ error: `Failed to process upload: ${error.message}` });
       }
     });
   } catch (error) {
     console.error('Error setting up upload:', error);
-    res.status(500).json({ error: 'Upload setup failed' });
+    res.status(500).json({ error: `Upload setup failed: ${error.message}` });
   }
 });
 
