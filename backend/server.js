@@ -80,7 +80,8 @@ app.post('/api/files/upload', async (req, res) => {
           return res.status(400).json({ error: 'No file provided in request' });
         }
         
-        const filePath = path.join(WORKSPACE_DIR, targetPath, file.originalname);
+        // targetPath already includes the full path including filename, so we don't need to add file.originalname again
+        const filePath = path.join(WORKSPACE_DIR, targetPath);
         await fs.mkdir(path.dirname(filePath), { recursive: true });
         
         // Move uploaded file to destination
