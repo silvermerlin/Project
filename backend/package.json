@@ -20,11 +20,7 @@
     "uuid": "^9.0.1",
     "mime-types": "^2.1.35",
     "archiver": "^6.0.1",
-    "unzipper": "^0.10.14",
-    "node-ssh": "^13.1.0",
-    "dockerode": "^4.0.2",
-    "pm2": "^5.3.0",
-    "node-pty": "^1.0.0"
+    "unzipper": "^0.10.14"
   },
   "devDependencies": {
     "nodemon": "^3.0.1",
