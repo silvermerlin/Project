@@ -53,11 +53,252 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// API health check endpoint (for frontend)
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    workspace: WORKSPACE_DIR,
+    terminals: terminals.size,
+    watchers: fileWatchers.size,
+    clients: clients.size
+  });
+});
+
 // ============================================================================
 // 🗂️ FILE SYSTEM OPERATIONS
 // ============================================================================
 
-// Get file tree
+// List files (frontend expects this endpoint)
+app.get('/api/files/list', async (req, res) => {
+  try {
+    const { path: requestPath = '/' } = req.query;
+    const fullPath = path.join(WORKSPACE_DIR, requestPath);
+    
+    const stats = await fs.stat(fullPath);
+    
+    if (stats.isDirectory()) {
+      const items = await fs.readdir(fullPath, { withFileTypes: true });
+      const fileList = await Promise.all(
+        items.map(async (item) => {
+          const itemPath = path.join(fullPath, item.name);
+          const relativePath = path.relative(WORKSPACE_DIR, itemPath);
+          const stats = await fs.stat(itemPath);
+          
+          return {
+            name: item.name,
+            path: relativePath,
+            type: item.isDirectory() ? 'directory' : 'file',
+            size: stats.size,
+            modified: stats.mtime,
+            isDirectory: item.isDirectory()
+          };
+        })
+      );
+      
+      res.json(fileList);
+    } else {
+      res.json([]);
+    }
+  } catch (error) {
+    console.error('Error reading directory:', error);
+    res.status(500).json({ error: 'Failed to read directory' });
+  }
+});
+
+// Get file content (frontend expects this endpoint)
+app.get('/api/files/content', async (req, res) => {
+  try {
+    const { path: filePath } = req.query;
+    if (!filePath) {
+      return res.status(400).json({ error: 'File path is required' });
+    }
+    
+    const fullPath = path.join(WORKSPACE_DIR, filePath);
+    const content = await fs.readFile(fullPath, 'utf-8');
+    
+    res.json({ content });
+  } catch (error) {
+    console.error('Error reading file:', error);
+    res.status(500).json({ error: 'Failed to read file' });
+  }
+});
+
+// Save file content (frontend expects this endpoint)
+app.post('/api/files/save', async (req, res) => {
+  try {
+    const { path: filePath, content } = req.body;
+    if (!filePath || content === undefined) {
+      return res.status(400).json({ error: 'File path and content are required' });
+    }
+    
+    const fullPath = path.join(WORKSPACE_DIR, filePath);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, content, 'utf-8');
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving file:', error);
+    res.status(500).json({ error: 'Failed to save file' });
+  }
+});
+
+// Upload file (frontend expects this endpoint)
+app.post('/api/files/upload', async (req, res) => {
+  try {
+    // Handle multipart form data
+    const multer = (await import('multer')).default;
+    const upload = multer({ dest: '/tmp/' });
+    
+    upload.single('file')(req, res, async (err) => {
+      if (err) {
+        console.error('Upload error:', err);
+        return res.status(400).json({ error: 'Upload failed' });
+      }
+      
+      try {
+        const file = req.file;
+        const { path: targetPath = '/' } = req.body;
+        
+        if (!file) {
+          return res.status(400).json({ error: 'No file provided' });
+        }
+        
+        const filePath = path.join(WORKSPACE_DIR, targetPath, file.originalname);
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        
+        // Move uploaded file to destination
+        await fs.copyFile(file.path, filePath);
+        await fs.unlink(file.path); // Clean up temp file
+        
+        res.json({ success: true, filePath: path.relative(WORKSPACE_DIR, filePath) });
+      } catch (error) {
+        console.error('Error processing upload:', error);
+        res.status(500).json({ error: 'Failed to process upload' });
+      }
+    });
+  } catch (error) {
+    console.error('Error setting up upload:', error);
+    res.status(500).json({ error: 'Upload setup failed' });
+  }
+});
+
+// Create file (frontend expects this endpoint)
+app.post('/api/files/create', async (req, res) => {
+  try {
+    const { path: filePath, content = '' } = req.body;
+    if (!filePath) {
+      return res.status(400).json({ error: 'File path is required' });
+    }
+    
+    const fullPath = path.join(WORKSPACE_DIR, filePath);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, content, 'utf-8');
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error creating file:', error);
+    res.status(500).json({ error: 'Failed to create file' });
+  }
+});
+
+// Create folder (frontend expects this endpoint)
+app.post('/api/files/create-folder', async (req, res) => {
+  try {
+    const { path: folderPath } = req.body;
+    if (!folderPath) {
+      return res.status(400).json({ error: 'Folder path is required' });
+    }
+    
+    const fullPath = path.join(WORKSPACE_DIR, folderPath);
+    await fs.mkdir(fullPath, { recursive: true });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error creating folder:', error);
+    res.status(500).json({ error: 'Failed to create folder' });
+  }
+});
+
+// Delete file (frontend expects this endpoint)
+app.delete('/api/files/delete', async (req, res) => {
+  try {
+    const { path: filePath } = req.body;
+    if (!filePath) {
+      return res.status(400).json({ error: 'File path is required' });
+    }
+    
+    const fullPath = path.join(WORKSPACE_DIR, filePath);
+    const stats = await fs.stat(fullPath);
+    
+    if (stats.isDirectory()) {
+      await fs.rmdir(fullPath, { recursive: true });
+    } else {
+      await fs.unlink(fullPath);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    res.status(500).json({ error: 'Failed to delete file' });
+  }
+});
+
+// Rename file (frontend expects this endpoint)
+app.post('/api/files/rename', async (req, res) => {
+  try {
+    const { oldPath, newPath } = req.body;
+    if (!oldPath || !newPath) {
+      return res.status(400).json({ error: 'Old path and new path are required' });
+    }
+    
+    const oldFullPath = path.join(WORKSPACE_DIR, oldPath);
+    const newFullPath = path.join(WORKSPACE_DIR, newPath);
+    
+    await fs.mkdir(path.dirname(newFullPath), { recursive: true });
+    await fs.rename(oldFullPath, newFullPath);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error renaming file:', error);
+    res.status(500).json({ error: 'Failed to rename file' });
+  }
+});
+
+// Terminal endpoint (frontend expects this endpoint)
+app.post('/api/terminal', async (req, res) => {
+  try {
+    const { command, cwd = '/workspace' } = req.body;
+    if (!command) {
+      return res.status(400).json({ error: 'Command is required' });
+    }
+    
+    // Simple command execution using child_process
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    const result = await execAsync(command, { 
+      cwd: path.join(WORKSPACE_DIR, cwd),
+      timeout: 30000 
+    });
+    
+    res.json({ 
+      output: result.stdout + result.stderr,
+      exitCode: 0,
+      cwd: cwd
+    });
+  } catch (error) {
+    console.error('Error executing command:', error);
+    res.status(500).json({ 
+      output: error.message,
+      exitCode: 1,
+      cwd: req.body.cwd || '/workspace'
+    });
+  }
+});
+
+// Get file tree (original endpoint - keeping for compatibility)
 app.get('/api/files', async (req, res) => {
   try {
     const { path: requestPath = '' } = req.query;
@@ -92,125 +333,6 @@ app.get('/api/files', async (req, res) => {
   } catch (error) {
     console.error('Error reading directory:', error);
     res.status(500).json({ error: 'Failed to read directory' });
-  }
-});
-
-// Read file content
-app.get('/api/files/:path(*)', async (req, res) => {
-  try {
-    const filePath = path.join(WORKSPACE_DIR, req.params.path);
-    const content = await fs.readFile(filePath, 'utf-8');
-    const stats = await fs.stat(filePath);
-    
-    res.json({
-      content,
-      size: stats.size,
-      modified: stats.mtime,
-      mimeType: mime.lookup(filePath) || 'text/plain'
-    });
-  } catch (error) {
-    console.error('Error reading file:', error);
-    res.status(500).json({ error: 'Failed to read file' });
-  }
-});
-
-// Create/Update file
-app.post('/api/files/:path(*)', async (req, res) => {
-  try {
-    const filePath = path.join(WORKSPACE_DIR, req.params.path);
-    const { content, createDir = true } = req.body;
-    
-    if (createDir) {
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
-    }
-    
-    await fs.writeFile(filePath, content, 'utf-8');
-    const stats = await fs.stat(filePath);
-    
-    // Notify clients of file change
-    broadcastToClients({
-      type: 'file_changed',
-      data: {
-        path: req.params.path,
-        action: 'created',
-        size: stats.size,
-        modified: stats.mtime
-      }
-    });
-    
-    res.json({ success: true, size: stats.size, modified: stats.mtime });
-  } catch (error) {
-    console.error('Error writing file:', error);
-    res.status(500).json({ error: 'Failed to write file' });
-  }
-});
-
-// Delete file/directory
-app.delete('/api/files/:path(*)', async (req, res) => {
-  try {
-    const filePath = path.join(WORKSPACE_DIR, req.params.path);
-    const stats = await fs.stat(filePath);
-    
-    if (stats.isDirectory()) {
-      await fs.rmdir(filePath, { recursive: true });
-    } else {
-      await fs.unlink(filePath);
-    }
-    
-    // Notify clients of file deletion
-    broadcastToClients({
-      type: 'file_changed',
-      data: {
-        path: req.params.path,
-        action: 'deleted'
-      }
-    });
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting file:', error);
-    res.status(500).json({ error: 'Failed to delete file' });
-  }
-});
-
-// Create directory
-app.post('/api/directories/:path(*)', async (req, res) => {
-  try {
-    const dirPath = path.join(WORKSPACE_DIR, req.params.path);
-    await fs.mkdir(dirPath, { recursive: true });
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error creating directory:', error);
-    res.status(500).json({ error: 'Failed to create directory' });
-  }
-});
-
-// Upload files
-app.post('/api/upload', async (req, res) => {
-  try {
-    const { files, targetPath = '' } = req.body;
-    const results = [];
-    
-    for (const file of files) {
-      const filePath = path.join(WORKSPACE_DIR, targetPath, file.name);
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
-      
-      // Decode base64 content
-      const content = Buffer.from(file.content, 'base64');
-      await fs.writeFile(filePath, content);
-      
-      results.push({
-        name: file.name,
-        path: path.relative(WORKSPACE_DIR, filePath),
-        size: content.length
-      });
-    }
-    
-    res.json({ success: true, files: results });
-  } catch (error) {
-    console.error('Error uploading files:', error);
-    res.status(500).json({ error: 'Failed to upload files' });
   }
 });
 
