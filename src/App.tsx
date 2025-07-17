@@ -397,28 +397,7 @@ const AppContent: React.FC = () => {
       
       return () => clearTimeout(timeoutId);
     }
-  }, [activeFileId]);
-
-  // Auto-save functionality
-  const handleAutoSave = useCallback(async (fileId: string) => {
-    const file = openFiles.find(f => f.id === fileId);
-    if (!file || !file.isModified) return;
-
-    try {
-      console.log('🔄 Auto-saving file:', file.path);
-      await apiService.saveFileContent(file.path, file.content || '');
-      
-      setOpenFiles(prev => prev.map(f => 
-        f.id === fileId 
-          ? { ...f, isModified: false }
-          : f
-      ));
-      
-      console.log('✅ Auto-save completed');
-    } catch (error) {
-      console.error('❌ Auto-save failed:', error);
-    }
-  }, [openFiles]);
+  }, [activeFileId, handleAutoSave]);
 
   const handleSaveFile = useCallback(async (fileId?: string) => {
     const targetFileId = fileId || activeFileId;
