@@ -129,13 +129,13 @@ const AppContent: React.FC = () => {
         await apiService.uploadFile(file, filePath);
       }
       
-      // Reload file system
-      await loadFileSystem(currentPath);
+      // Reload file system from root to show all uploaded files
+      await loadFileSystem('/');
     } catch (error) {
       console.error('Error uploading files:', error);
       alert('Failed to upload files');
     }
-  }, [currentPath]);
+  }, []);
 
   const handleOpenFolder = useCallback(async (fileList: FileList) => {
     try {
@@ -147,13 +147,13 @@ const AppContent: React.FC = () => {
         await apiService.uploadFile(file, filePath);
       }
       
-      // Reload file system
-      await loadFileSystem(currentPath);
+      // Reload file system from root to show all uploaded files
+      await loadFileSystem('/');
     } catch (error) {
       console.error('Error uploading folder:', error);
       alert('Failed to upload folder');
     }
-  }, [currentPath]);
+  }, []);
 
   const handleFileSelect = useCallback(async (fileId: string) => {
     const file = fileSystemItems.find(f => f.id === fileId);
