@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar';
 import TabBar from './components/TabBar';
 import Editor from './components/Editor';
 import AgentWorkflowUI from './components/AgentWorkflowUI';
+import AIChat from './components/AIChat';
 import EnhancedTerminal from './components/EnhancedTerminal';
 import SettingsModal from './components/SettingsModal';
 import MenuBar from './components/MenuBar';
@@ -53,9 +54,22 @@ const AppContent: React.FC = () => {
   const [currentPath, setCurrentPath] = useState('/');
   const [backendConnected, setBackendConnected] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [showAIChat, setShowAIChat] = useState(false);
 
   // Get active file
   const activeFile = openFiles.find(f => f.id === activeFileId) || null;
+
+  // Handle Ctrl+L shortcut to open AI chat
+  useEffect(() => {
+    const handleOpenAIChat = () => {
+      setShowAIChat(true);
+    };
+
+    window.addEventListener('open-ai-chat', handleOpenAIChat);
+    return () => {
+      window.removeEventListener('open-ai-chat', handleOpenAIChat);
+    };
+  }, []);
 
   // Initialize backend connection
   useEffect(() => {
@@ -207,53 +221,168 @@ const AppContent: React.FC = () => {
     }
   }, []);
 
-  // Helper function to find a file recursively in the file system tree
-  const findFileRecursively = (items: FileSystemItem[], fileId: string): FileItem | null => {
-    for (const item of items) {
-      if (item.id === fileId && item.type === 'file') {
-        return item as FileItem;
-      }
-      if (item.type === 'folder') {
-        const folderItem = item as FolderItem;
-        const found = findFileRecursively(folderItem.children, fileId);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-
   const handleFileSelect = useCallback(async (fileId: string) => {
     console.log('📄 File selected:', fileId);
-    const file = findFileRecursively(fileSystemItems, fileId);
-    console.log('📄 Found file:', file);
-    if (!file) {
-      console.log('❌ File not found');
+    
+    // Check if file is already open
+    const existingFile = openFiles.find(f => f.id === fileId);
+    if (existingFile) {
+      setActiveFileId(fileId);
       return;
     }
 
-    // Check if file is already open
-    const isAlreadyOpen = openFiles.some(f => f.id === fileId);
-    if (isAlreadyOpen) {
-      console.log('📄 File already open, switching to it');
-      setActiveFileId(fileId);
+    // Find file in file system
+    const findFileRecursively = (items: FileSystemItem[], fileId: string): FileItem | null => {
+      for (const item of items) {
+        if (item.id === fileId) {
+          if (item.type === 'file') {
+            return {
+              id: item.id,
+              name: item.name,
+              path: item.path,
+              type: 'file',
+              content: item.content || '',
+              isModified: false,
+              isLoaded: false
+            };
+          }
+          return null;
+        }
+        if (item.type === 'folder' && item.children) {
+          const found = findFileRecursively(item.children, fileId);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const fileItem = findFileRecursively(fileSystemItems, fileId);
+    if (!fileItem) {
+      console.error('❌ File not found:', fileId);
       return;
     }
 
     try {
-      console.log('📄 Loading file content from backend for path:', file.path);
-      // Load file content from backend
-      const content = await apiService.getFileContent(file.path);
-      console.log('📄 File content loaded, length:', content?.length || 0);
-      const fileWithContent = { ...file, content: content || '', isLoaded: true };
+      console.log('📄 Loading file content for:', fileItem.path);
+      const content = await apiService.getFileContent(fileItem.path);
       
-      setOpenFiles(prev => [...prev, fileWithContent]);
+      const newFile: FileItem = {
+        ...fileItem,
+        content,
+        isLoaded: true
+      };
+
+      setOpenFiles(prev => [...prev, newFile]);
       setActiveFileId(fileId);
-      console.log('📄 File opened successfully');
+      
+      console.log('✅ File opened successfully');
     } catch (error) {
-      console.error('Error loading file content:', error);
-      alert('Failed to load file content');
+      console.error('❌ Error loading file:', error);
+      alert('Failed to load file');
     }
   }, [fileSystemItems, openFiles]);
+
+  const handleToggleFolder = useCallback(async (folderId: string) => {
+    console.log('📁 Toggling folder:', folderId);
+    
+    const findFolder = (items: FileSystemItem[]): FileSystemItem | null => {
+      for (const item of items) {
+        if (item.id === folderId) {
+          return item;
+        }
+        if (item.type === 'folder' && item.children) {
+          const found = findFolder(item.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const folder = findFolder(fileSystemItems);
+    if (!folder || folder.type !== 'folder') {
+      console.error('❌ Folder not found:', folderId);
+      return;
+    }
+
+    if (!folder.isExpanded) {
+      // Load folder contents
+      try {
+        console.log('📁 Loading contents for folder path:', folder.path);
+        const files = await apiService.listFiles(folder.path);
+        
+        console.log('📁 API: File list response:', files);
+        
+        const folderItems: FileSystemItem[] = files.map((file: BackendFileInfo) => {
+          if (file.isDirectory) {
+            return {
+              id: file.path,
+              name: file.name,
+              path: file.path,
+              type: 'folder' as const,
+              children: [],
+              isExpanded: false
+            };
+          } else {
+            return {
+              id: file.path,
+              name: file.name,
+              path: file.path,
+              type: 'file' as const,
+              content: '',
+              language: getFileLanguage(file.name),
+              isModified: false,
+              isLoaded: false
+            };
+          }
+        });
+
+        // Update folder with children
+        const updateFolderRecursively = (items: FileSystemItem[]): FileSystemItem[] => {
+          return items.map(item => {
+            if (item.id === folderId) {
+              return {
+                ...item,
+                children: folderItems,
+                isExpanded: true
+              };
+            }
+            if (item.type === 'folder' && item.children) {
+              return {
+                ...item,
+                children: updateFolderRecursively(item.children)
+              };
+            }
+            return item;
+          });
+        };
+
+        setFileSystemItems(prev => updateFolderRecursively(prev));
+      } catch (error) {
+        console.error('Error loading folder contents:', error);
+      }
+    } else {
+      // Collapse folder
+      const updateFolderRecursively = (items: FileSystemItem[]): FileSystemItem[] => {
+        return items.map(item => {
+          if (item.id === folderId) {
+            return {
+              ...item,
+              isExpanded: false
+            };
+          }
+          if (item.type === 'folder' && item.children) {
+            return {
+              ...item,
+              children: updateFolderRecursively(item.children)
+            };
+          }
+          return item;
+        });
+      };
+
+      setFileSystemItems(prev => updateFolderRecursively(prev));
+    }
+  }, [fileSystemItems]);
 
   // Handle file content changes
   const handleFileChange = useCallback(async (fileId: string, content: string) => {
@@ -317,6 +446,12 @@ const AppContent: React.FC = () => {
   }, []);
 
   const handleTabClose = useCallback((fileId: string) => {
+    const file = openFiles.find(f => f.id === fileId);
+    if (file && file.isModified) {
+      const shouldClose = confirm('File has unsaved changes. Do you want to close it?');
+      if (!shouldClose) return;
+    }
+
     setOpenFiles(prev => prev.filter(f => f.id !== fileId));
     
     if (fileId === activeFileId) {
@@ -327,62 +462,7 @@ const AppContent: React.FC = () => {
         setActiveFileId(null);
       }
     }
-  }, [activeFileId, openFiles]);
-
-  const handleToggleFolder = useCallback(async (folderId: string) => {
-    console.log('🔄 Toggling folder:', folderId);
-    const folder = fileSystemItems.find(f => f.id === folderId);
-    console.log('📁 Found folder:', folder);
-    if (!folder || folder.type !== 'folder') {
-      console.log('❌ Folder not found or wrong type:', folder?.type);
-      return;
-    }
-
-    try {
-      const folderItem = folder as FolderItem;
-      console.log('📁 Folder item:', folderItem);
-      if (!folderItem.isExpanded) {
-        // Load folder contents from backend
-        console.log('📂 Loading contents for folder path:', folder.path);
-        const files = await apiService.listFiles(folder.path);
-        console.log('📂 Files in folder:', files);
-        const children: FileSystemItem[] = files.map((file: BackendFileInfo) => {
-          if (file.isDirectory) {
-            return {
-              id: file.path,
-              name: file.name,
-              path: file.path,
-              type: 'folder' as const,
-              children: [],
-              isExpanded: false
-            };
-          } else {
-            return {
-              id: file.path,
-              name: file.name,
-              path: file.path,
-              type: 'file' as const,
-              content: '',
-              language: getFileLanguage(file.name),
-              isModified: false,
-              isLoaded: false
-            };
-          }
-        });
-
-        setFileSystemItems(prev => prev.map(f => 
-          f.id === folderId ? { ...f, children, isExpanded: true } : f
-        ));
-      } else {
-        // Collapse folder
-        setFileSystemItems(prev => prev.map(f => 
-          f.id === folderId ? { ...f, isExpanded: false } : f
-        ));
-      }
-    } catch (error) {
-      console.error('Error loading folder contents:', error);
-    }
-  }, [fileSystemItems]);
+  }, [openFiles, activeFileId]);
 
   const handleEditorChange = useCallback((content: string) => {
     if (activeFileId) {
@@ -575,16 +655,22 @@ const AppContent: React.FC = () => {
           {/* Resize handle */}
           <PanelResizeHandle className="w-1 bg-editor-border hover:bg-editor-accent transition-colors" />
 
-          {/* Agent Workflow UI */}
+          {/* Right Panel - AI Features */}
           <Panel defaultSize={25} minSize={20} maxSize={40}>
-            <AgentWorkflowUI
-              workflow={null}
-              isExecuting={false}
-              onCancel={() => {}}
-              onRetry={() => {}}
-              onSendRequest={() => {}}
-              className="h-full"
-            />
+            <PanelGroup direction="vertical">
+              {/* AI Chat */}
+              <Panel defaultSize={50} minSize={30}>
+                <AIChat className="h-full" />
+              </Panel>
+              
+              {/* Resize handle */}
+              <PanelResizeHandle className="h-1 bg-editor-border hover:bg-editor-accent transition-colors" />
+              
+              {/* Agent Workflow */}
+              <Panel defaultSize={50} minSize={30}>
+                <AgentWorkflowUI className="h-full" />
+              </Panel>
+            </PanelGroup>
           </Panel>
         </PanelGroup>
       </div>

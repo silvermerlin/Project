@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, MessageCircle, Sparkles, Copy, Check } from 'lucide-react';
+import { Send, Copy, Check } from 'lucide-react';
 import { cn } from '../utils';
+import { useSettings } from '../contexts/SettingsContext';
+import { createOllamaService } from '../services/ollamaService';
 
 interface Message {
   id: string;
@@ -14,6 +16,7 @@ interface AIChatProps {
 }
 
 const AIChat: React.FC<AIChatProps> = ({ className }) => {
+  const { settings } = useSettings();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -25,6 +28,7 @@ const AIChat: React.FC<AIChatProps> = ({ className }) => {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -37,7 +41,7 @@ const AIChat: React.FC<AIChatProps> = ({ className }) => {
   }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isTyping) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -49,18 +53,68 @@ const AIChat: React.FC<AIChatProps> = ({ className }) => {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
+    setAiError(null);
 
-    // Simulate AI response (in real implementation, this would call your AI API)
-    setTimeout(() => {
+    try {
+      // Get the active AI model
+      const activeModel = settings.ai.models.find(m => m.isEnabled);
+      if (!activeModel) {
+        throw new Error('No AI model configured. Please check your settings.');
+      }
+
+      // Create AI service
+      const aiService = createOllamaService(activeModel);
+
+      // Check AI health first
+      const healthCheck = await aiService.healthCheck();
+      if (!healthCheck.healthy) {
+        throw new Error(`AI service not available: ${healthCheck.error}`);
+      }
+
+      // Generate AI response
+      const systemPrompt = `You are an expert AI coding assistant integrated into a VS Code-like editor. 
+
+You can help with:
+1. Code analysis and explanations
+2. Debugging and error fixing
+3. Code refactoring and optimization
+4. Writing new code and functions
+5. Best practices and design patterns
+6. Language-specific guidance
+7. Project structure recommendations
+
+Provide clear, actionable responses. When suggesting code, use proper syntax highlighting and explain your reasoning.`;
+
+      const response = await aiService.generateResponse(
+        input,
+        systemPrompt,
+        activeModel.temperature,
+        activeModel.maxTokens
+      );
+
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: "I understand you're looking for help with your code. While I'm currently in development mode, I'm designed to provide intelligent code assistance. In the full version, I'll be able to:\n\n• Explain code functionality\n• Debug issues\n• Suggest improvements\n• Generate code snippets\n• Refactor existing code\n• Answer programming questions\n\nFor now, you can use me to discuss your coding needs and I'll provide helpful responses once the AI backend is connected!",
+        content: response.content,
         timestamp: new Date(),
       };
+
       setMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('AI chat error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to get AI response';
+      setAiError(errorMessage);
+      
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: `Sorry, I encountered an error: ${errorMessage}\n\nPlease check your AI model configuration in settings.`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorResponse]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -84,90 +138,106 @@ const AIChat: React.FC<AIChatProps> = ({ className }) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatMessageContent = (content: string) => {
+    // Simple markdown-like formatting for code blocks
+    const formattedContent = content
+      .replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+        return `<pre class="bg-editor-tab border border-editor-border rounded p-3 my-2 overflow-x-auto"><code class="text-sm">${code}</code></pre>`;
+      })
+      .replace(/`([^`]+)`/g, '<code class="bg-editor-tab px-1 rounded text-sm">$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/\n/g, '<br>');
+
+    return { __html: formattedContent };
+  };
+
   return (
-    <div className={cn("bg-editor-sidebar border-l border-editor-border flex flex-col h-full", className)}>
+    <div className={cn("flex flex-col h-full bg-editor-bg", className)}>
       {/* Header */}
       <div className="p-4 border-b border-editor-border">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-editor-accent" />
-          <h2 className="text-lg font-semibold text-editor-text">AI Assistant</h2>
-        </div>
-        <p className="text-sm text-editor-text-secondary mt-1">
-          Your coding companion
-        </p>
+        <h3 className="text-sm font-medium text-editor-text">AI Chat Assistant</h3>
+        {aiError && (
+          <div className="mt-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-400">
+            {aiError}
+          </div>
+        )}
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto editor-scrollbar p-4 space-y-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={cn(
-              "flex gap-3 animate-fade-in",
-              message.type === 'user' ? 'flex-row-reverse' : ''
-            )}
-          >
-            <div className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-              message.type === 'user' 
-                ? "bg-editor-accent text-white" 
-                : "bg-editor-tab text-editor-text"
-            )}>
-              {message.type === 'user' ? (
-                <User className="w-4 h-4" />
-              ) : (
-                <Bot className="w-4 h-4" />
+      <div className="flex-1 overflow-y-auto editor-scrollbar">
+        <div className="p-4 space-y-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={cn(
+                "flex gap-3",
+                message.type === 'user' ? "justify-end" : "justify-start"
+              )}
+            >
+              {message.type === 'ai' && (
+                <div className="w-6 h-6 bg-editor-accent rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs text-white font-medium">AI</span>
+                </div>
+              )}
+              
+              <div
+                className={cn(
+                  "max-w-[80%] rounded-lg p-3",
+                  message.type === 'user'
+                    ? "bg-editor-accent text-white"
+                    : "bg-editor-tab text-editor-text"
+                )}
+              >
+                <div 
+                  className="text-sm leading-relaxed"
+                  dangerouslySetInnerHTML={formatMessageContent(message.content)}
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-xs opacity-60">
+                    {formatTime(message.timestamp)}
+                  </span>
+                  {message.type === 'ai' && (
+                    <button
+                      onClick={() => copyToClipboard(message.content, message.id)}
+                      className="text-xs opacity-60 hover:opacity-100 transition-opacity"
+                    >
+                      {copiedMessageId === message.id ? (
+                        <Check className="w-3 h-3" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {message.type === 'user' && (
+                <div className="w-6 h-6 bg-editor-accent rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs text-white font-medium">U</span>
+                </div>
               )}
             </div>
-
-            <div className={cn(
-              "flex-1 min-w-0",
-              message.type === 'user' ? 'flex justify-end' : ''
-            )}>
-              <div className={cn(
-                "rounded-lg p-3 max-w-[80%] group relative",
-                message.type === 'user'
-                  ? "bg-editor-accent text-white"
-                  : "bg-editor-tab text-editor-text"
-              )}>
-                <div className="whitespace-pre-wrap break-words text-sm">
-                  {message.content}
-                </div>
-                
-                <div className="flex items-center justify-between mt-2 text-xs opacity-70">
-                  <span>{formatTime(message.timestamp)}</span>
-                  <button
-                    onClick={() => copyToClipboard(message.content, message.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-editor-border"
-                    title="Copy message"
-                  >
-                    {copiedMessageId === message.id ? (
-                      <Check className="w-3 h-3" />
-                    ) : (
-                      <Copy className="w-3 h-3" />
-                    )}
-                  </button>
+          ))}
+          
+          {isTyping && (
+            <div className="flex gap-3 justify-start">
+              <div className="w-6 h-6 bg-editor-accent rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-xs text-white font-medium">AI</span>
+              </div>
+              <div className="bg-editor-tab rounded-lg p-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-editor-accent rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-editor-accent rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-editor-accent rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  </div>
+                  <span className="text-sm text-editor-text-secondary">AI is thinking...</span>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
-
-        {isTyping && (
-          <div className="flex gap-3 animate-fade-in">
-            <div className="w-8 h-8 rounded-full bg-editor-tab text-editor-text flex items-center justify-center">
-              <Bot className="w-4 h-4" />
-            </div>
-            <div className="bg-editor-tab text-editor-text rounded-lg p-3">
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 bg-editor-text-secondary rounded-full animate-pulse"></div>
-                <div className="w-2 h-2 bg-editor-text-secondary rounded-full animate-pulse delay-100"></div>
-                <div className="w-2 h-2 bg-editor-text-secondary rounded-full animate-pulse delay-200"></div>
-              </div>
-            </div>
-          </div>
-        )}
-
+          )}
+        </div>
         <div ref={messagesEndRef} />
       </div>
 
@@ -183,6 +253,7 @@ const AIChat: React.FC<AIChatProps> = ({ className }) => {
             className="flex-1 bg-editor-tab border border-editor-border rounded-lg px-3 py-2 text-sm text-editor-text placeholder-editor-text-secondary resize-none min-h-[40px] max-h-[120px] focus:outline-none focus:border-editor-accent transition-colors"
             rows={1}
             style={{ resize: 'none' }}
+            disabled={isTyping}
           />
           <button
             onClick={handleSend}
