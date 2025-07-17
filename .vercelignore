@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Development files
+.env.local
+.env.development.local
+.env.test.local
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Backend files (not needed for frontend deployment)
+backend/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+deploy.md 
